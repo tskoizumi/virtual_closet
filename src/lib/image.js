@@ -111,3 +111,35 @@ export async function dataURLToBlob(url) {
   const res = await fetch(url);
   return await res.blob();
 }
+
+// box = [ymin, xmin, ymax, xmax]（0〜1000）で切り出す
+export async function cropBox(blob, box, padRatio = 0.04) {
+  const bmp = await bitmap(blob);
+  const W = bmp.width, H = bmp.height;
+  let [y0, x0, y1, x1] = box.map((v) => Math.max(0, Math.min(1000, Number(v) || 0)) / 1000);
+  if (y1 <= y0 || x1 <= x0) throw new Error('検出枠が不正です');
+  const px = (x1 - x0) * padRatio + 0.01, py = (y1 - y0) * padRatio + 0.01;
+  x0 = Math.max(0, x0 - px); y0 = Math.max(0, y0 - py);
+  x1 = Math.min(1, x1 + px); y1 = Math.min(1, y1 + py);
+  const sx = Math.round(x0 * W), sy = Math.round(y0 * H);
+  const sw = Math.max(8, Math.round((x1 - x0) * W)), sh = Math.max(8, Math.round((y1 - y0) * H));
+  const c = document.createElement('canvas');
+  c.width = sw;
+  c.height = sh;
+  c.getContext('2d').drawImage(bmp, sx, sy, sw, sh, 0, 0, sw, sh);
+  bmp.close?.();
+  return canvasToBlob(c, 'image/jpeg', 0.9);
+}
+
+// 登録用の画像を作る（設定に応じて背景切り抜き）
+export async function prepareItemImage(file, { useCutout, onProgress } = {}) {
+  const original = await resize(file, 1600, { type: 'image/jpeg', quality: 0.88 });
+  let image;
+  if (useCutout) {
+    const cut = await removeBg(original, onProgress);
+    image = await resize(await trimTransparent(cut), 900, { type: 'image/png' });
+  } else {
+    image = await resize(original, 900, { type: 'image/jpeg', quality: 0.88 });
+  }
+  return { original, image };
+}

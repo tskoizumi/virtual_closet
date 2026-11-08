@@ -5,6 +5,7 @@ import { CATEGORY_LABEL } from '../lib/rules.js';
 import { Chips, Modal, Thumb } from './ui.jsx';
 import ItemEditor from './ItemEditor.jsx';
 import AddItem from './AddItem.jsx';
+import DetectFromPhoto from './DetectFromPhoto.jsx';
 
 const SORTS = [
   { value: 'new', label: '新しい順' },
@@ -24,6 +25,7 @@ export default function Closet({ addFiles, onAddHandled }) {
   const [sort, setSort] = useState('new');
   const [editing, setEditing] = useState(null);
   const [adding, setAdding] = useState(false);
+  const [detecting, setDetecting] = useState(false);
   const showAdd = adding || (addFiles && addFiles.length > 0);
 
   const list = useMemo(() => {
@@ -53,14 +55,20 @@ export default function Closet({ addFiles, onAddHandled }) {
             {items.length > 0 && ` ・ 30日以上着てない服 ${sleeping}点`}
           </p>
         </div>
-        <button className="btn btn-primary" onClick={() => setAdding(true)}>＋ 服を追加</button>
+        <div className="row wrap head-actions">
+          <button className="btn" onClick={() => setDetecting(true)}>📸 コーデ写真から</button>
+          <button className="btn btn-primary" onClick={() => setAdding(true)}>＋ 服を追加</button>
+        </div>
       </div>
 
       {items.length === 0 ? (
         <div className="empty">
           <p>まだ服が登録されていません。</p>
           <p className="muted">まずはトップス・ボトムス・靴を数点ずつ登録すると、コーデ提案が使えるようになります。</p>
-          <button className="btn btn-primary" onClick={() => setAdding(true)}>最初の1着を登録する</button>
+          <div className="row" style={{ justifyContent: 'center', flexWrap: 'wrap' }}>
+            <button className="btn btn-primary" onClick={() => setAdding(true)}>最初の1着を登録する</button>
+            <button className="btn" onClick={() => setDetecting(true)}>📸 コーデ写真からまとめて登録</button>
+          </div>
         </div>
       ) : (
         <>
@@ -97,7 +105,8 @@ export default function Closet({ addFiles, onAddHandled }) {
             image={editing.image}
             onCancel={() => setEditing(null)}
             onSave={async (f) => {
-              const { image, original, id, ...rest } = f;
+              const { id, ...rest } = f;
+              if (!rest.original) delete rest.original;
               await db.items.update(editing.id, rest);
               setEditing(null);
             }}
@@ -121,6 +130,12 @@ export default function Closet({ addFiles, onAddHandled }) {
               </>
             }
           />
+        </Modal>
+      )}
+
+      {detecting && (
+        <Modal title="コーデ写真から登録" onClose={() => setDetecting(false)} wide>
+          <DetectFromPhoto onClose={() => setDetecting(false)} />
         </Modal>
       )}
 

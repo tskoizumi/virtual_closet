@@ -1,17 +1,64 @@
 import { useState } from 'react';
 import { CATEGORY_LABEL } from '../lib/rules.js';
-import { BlobImg } from './ui.jsx';
+import { getProfile } from '../lib/db.js';
+import { api } from '../lib/api.js';
+import { forAI, prepareItemImage, base64ToBlob, resize } from '../lib/image.js';
+import { BlobImg, ErrorBox, FilePick, Spinner } from './ui.jsx';
 
 const SEASON_LABEL = { spring: '春', summer: '夏', autumn: '秋', winter: '冬' };
 const FORMALITY = ['', '部屋着', 'ラフ', 'カジュアル', 'きれいめ', 'フォーマル'];
 const WARMTH = ['', '真夏', '夏', '春秋', '秋冬', '真冬'];
+const FIELDS = ['name', 'category', 'subcategory', 'colors', 'material', 'pattern', 'formality', 'warmth', 'seasons', 'notes'];
 
+// アイテムの編集フォーム。写真の差し替え・AI再解析・商品写真化もここでできる
 export default function ItemEditor({ initial, image, onSave, onCancel, saveLabel = '保存', extra }) {
   const [f, setF] = useState(() => ({
     name: '', category: 'tops', subcategory: '', colors: [], material: '', pattern: '',
     formality: 3, warmth: 3, seasons: [], notes: '', isFixed: false, ...initial,
   }));
+  const [img, setImg] = useState(image || null);
+  const [prevImg, setPrevImg] = useState(null);
+  const [original, setOriginal] = useState(null);
+  const [busy, setBusy] = useState('');
+  const [error, setError] = useState(null);
   const set = (k, v) => setF((p) => ({ ...p, [k]: v }));
+
+  const task = async (label, fn) => {
+    setBusy(label);
+    setError(null);
+    try { await fn(); } catch (e) { setError(e); } finally { setBusy(''); }
+  };
+
+  const replace = (files) =>
+    task('写真を処理中…', async () => {
+      const p = await getProfile();
+      let r;
+      try {
+        r = await prepareItemImage(files[0], { useCutout: p.useCutout });
+      } catch {
+        r = await prepareItemImage(files[0], { useCutout: false });
+      }
+      setPrevImg(img);
+      setImg(r.image);
+      setOriginal(r.original);
+    });
+
+  const reanalyze = () =>
+    task('AIが再解析中…', async () => {
+      const { item } = await api('tag', { image: await forAI(img) });
+      setF((p) => {
+        const n = { ...p };
+        FIELDS.forEach((k) => item[k] !== undefined && (n[k] = item[k]));
+        return n;
+      });
+    });
+
+  const productize = () =>
+    task('商品写真を生成中…（10〜30秒）', async () => {
+      const { image: out } = await api('productize', { image: await forAI(img, 1024), name: f.name });
+      setPrevImg(img);
+      setImg(await resize(base64ToBlob(out), 900, { type: 'image/jpeg', quality: 0.9 }));
+    });
 
   return (
     <form
@@ -19,14 +66,24 @@ export default function ItemEditor({ initial, image, onSave, onCancel, saveLabel
       onSubmit={(e) => {
         e.preventDefault();
         if (!f.name.trim()) return alert('名前を入力してください');
-        onSave({ ...f, formality: Number(f.formality), warmth: Number(f.warmth) });
+        if (busy) return;
+        onSave({ ...f, formality: Number(f.formality), warmth: Number(f.warmth), image: img, ...(original ? { original } : {}) });
       }}
     >
-      {image && (
+      {img && (
         <div className="editor-img">
-          <BlobImg blob={image} alt={f.name} />
+          <BlobImg blob={img} alt={f.name} />
         </div>
       )}
+      <div className="row wrap editor-tools">
+        <FilePick label={img ? '写真を差し替え' : '写真を追加'} onFiles={replace} className="btn btn-small" />
+        {img && <button type="button" className="btn btn-small" onClick={reanalyze} disabled={!!busy}>AIで再解析</button>}
+        {img && <button type="button" className="btn btn-small" onClick={productize} disabled={!!busy}>✨ 商品写真化</button>}
+        {prevImg && <button type="button" className="btn btn-small btn-ghost" onClick={() => { setImg(prevImg); setPrevImg(null); setOriginal(null); }}>写真を元に戻す</button>}
+      </div>
+      {busy && <Spinner label={busy} />}
+      <ErrorBox error={error} />
+
       <label className="field">
         <span>名前</span>
         <input value={f.name} onChange={(e) => set('name', e.target.value)} placeholder="例: 白のオックスフォードシャツ" />
@@ -49,8 +106,9 @@ export default function ItemEditor({ initial, image, onSave, onCancel, saveLabel
         <label className="field">
           <span>色（カンマ区切り）</span>
           <input
-            value={(f.colors || []).join(', ')}
-            onChange={(e) => set('colors', e.target.value.split(/[,、]/).map((s) => s.trim()).filter(Boolean))}
+            defaultValue={(f.colors || []).join(', ')}
+            key={(f.colors || []).join('|')}
+            onBlur={(e) => set('colors', e.target.value.split(/[,、]/).map((s) => s.trim()).filter(Boolean))}
           />
         </label>
         <label className="field">
@@ -96,7 +154,7 @@ export default function ItemEditor({ initial, image, onSave, onCancel, saveLabel
       <div className="editor-actions">
         {onCancel && <button type="button" className="btn btn-ghost" onClick={onCancel}>キャンセル</button>}
         {extra}
-        <button type="submit" className="btn btn-primary">{saveLabel}</button>
+        <button type="submit" className="btn btn-primary" disabled={!!busy}>{saveLabel}</button>
       </div>
     </form>
   );

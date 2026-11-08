@@ -94,8 +94,8 @@ export default function AddItem({ initialFiles = [], onClose }) {
     await db.items.add({
       ...fields,
       id: newId(),
-      image: work.image,
-      original: work.original,
+      image: fields.image || work.image,
+      original: fields.original || work.original,
       createdAt: Date.now(),
       wearCount: 0,
       lastWornAt: null,
