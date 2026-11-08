@@ -119,10 +119,19 @@ export default function Settings() {
           <span>「最近着た」とみなす日数: {p.recentDays}日</span>
           <input type="range" min="1" max="14" value={p.recentDays} onChange={(e) => update('recentDays', Number(e.target.value))} />
         </label>
-        <label className="check">
-          <input type="checkbox" checked={p.useCutout} onChange={(e) => update('useCutout', e.target.checked)} />
-          <span>登録時に背景を自動で切り抜く（初回のみモデルを数十MBダウンロード）</span>
-        </label>
+        <div className="field">
+          <span>登録時の写真の扱い</span>
+          {[
+            ['ai', 'AIで商品写真に撮り直す（おすすめ）', 'ハンガーや床が写っていてもOK。プロ品質の写真を生成して背景を透過。1点ごとに画像生成APIを使います'],
+            ['cutout', '背景だけ切り抜く', 'APIを使わずブラウザ内で処理。ハンガーなどは残ることがあります'],
+            ['none', 'そのまま', '撮った写真をそのまま使う'],
+          ].map(([v, l, d]) => (
+            <label key={v} className="check">
+              <input type="radio" name="photoMode" checked={p.photoMode === v} onChange={() => update('photoMode', v)} />
+              <span>{l}<br /><span className="muted small">{d}</span></span>
+            </label>
+          ))}
+        </div>
       </div>
 
       <div className="panel">

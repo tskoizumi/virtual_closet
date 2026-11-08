@@ -79,7 +79,7 @@ export default function Shop({ onBought }) {
           <div className={`verdict verdict-${res.verdict}`}>
             <span className="verdict-label">{res.verdict}</span>
             <div>
-              <div className="verdict-name">{res.product.name}</div>
+              <div className="verdict-name">{res.product.brand ? `${res.product.brand} ` : ''}{res.product.name}</div>
               <div className="muted small">{CATEGORY_LABEL[res.product.category]} ・ {res.product.colors?.join('/')} ・ {res.product.material}</div>
             </div>
           </div>

@@ -63,12 +63,21 @@ export async function trimTransparent(blob, pad = 12) {
 }
 
 let bgModule = null;
+let bgReady = false;
+function withTimeout(p, ms, msg) {
+  return Promise.race([p, new Promise((_, rej) => setTimeout(() => rej(new Error(msg)), ms))]);
+}
 export async function removeBg(blob, onProgress) {
-  if (!bgModule) bgModule = await import('@imgly/background-removal');
-  const res = await bgModule.removeBackground(blob, {
-    output: { format: 'image/png' },
-    progress: (key, current, total) => onProgress?.(key, current, total),
-  });
+  if (!bgModule) bgModule = await withTimeout(import('@imgly/background-removal'), 30000, '背景透過モジュールを読み込めませんでした');
+  const res = await withTimeout(
+    bgModule.removeBackground(blob, {
+      output: { format: 'image/png' },
+      progress: (key, current, total) => onProgress?.(key, current, total),
+    }),
+    bgReady ? 45000 : 120000,
+    '背景透過がタイムアウトしました'
+  );
+  bgReady = true;
   return res;
 }
 

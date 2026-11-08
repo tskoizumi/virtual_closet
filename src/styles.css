@@ -170,3 +170,24 @@ h4 { font-size: 13px; letter-spacing: .08em; color: var(--ink-2); margin: 18px 0
 .det-name { border: none; background: none; padding: 0; font-weight: 700; text-align: left; cursor: pointer; }
 .det-match { display: flex; align-items: center; gap: 8px; margin: 6px 0; }
 .det .check { margin: 6px 0 0; }
+.job-summary { display: flex; align-items: center; gap: 10px; margin: 14px 0 10px; flex-wrap: wrap; }
+.progress { flex: 1; min-width: 120px; height: 6px; background: var(--line); border-radius: 99px; overflow: hidden; }
+.progress span { display: block; height: 100%; background: var(--ink); transition: width .3s; }
+.job-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.job { position: relative; min-width: 0; }
+.job-tap { border: none; background: none; padding: 0; width: 100%; text-align: left; cursor: pointer; }
+.job-tap:disabled { cursor: default; }
+.job-img { aspect-ratio: 1; border: 1px solid var(--line); border-radius: 12px; background: #fff; padding: 6px; overflow: hidden; }
+.job-img img { width: 100%; height: 100%; object-fit: contain; }
+.job-working .job-img, .job-waiting .job-img { opacity: .55; }
+.job-error .job-img { border-color: var(--bad); }
+.job-name { font-size: 11px; margin-top: 4px; line-height: 1.35; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.job-note { font-size: 10px; color: var(--accent); }
+.job .spinner-row { position: absolute; top: 28%; left: 50%; transform: translateX(-50%); padding: 0; }
+.job-err p { margin: 4px 0; color: var(--bad); word-break: break-word; }
+.upload-banner { display: flex; align-items: center; gap: 10px; width: 100%; border: 1px solid var(--line); background: var(--paper); border-radius: 12px; padding: 10px 14px; margin-bottom: 12px; font-size: 13px; cursor: pointer; text-align: left; }
+.det-img { position: relative; }
+.det-busy { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; background: rgba(255,255,255,.6); border-radius: 10px; }
+@media (min-width: 640px) { .job-grid { grid-template-columns: repeat(4, 1fr); } }
+.cell-brand { font-family: var(--serif); font-size: 12px; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-2); margin-top: 6px; line-height: 1.1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cell-brand + .cell-name { margin-top: 0; }

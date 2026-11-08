@@ -2,18 +2,19 @@ import { useState } from 'react';
 import { CATEGORY_LABEL } from '../lib/rules.js';
 import { getProfile } from '../lib/db.js';
 import { api } from '../lib/api.js';
-import { forAI, prepareItemImage, base64ToBlob, resize } from '../lib/image.js';
+import { forAI, prepareItemImage } from '../lib/image.js';
+import { makeProductPhoto } from '../lib/productPhoto.js';
 import { BlobImg, ErrorBox, FilePick, Spinner } from './ui.jsx';
 
 const SEASON_LABEL = { spring: '春', summer: '夏', autumn: '秋', winter: '冬' };
 const FORMALITY = ['', '部屋着', 'ラフ', 'カジュアル', 'きれいめ', 'フォーマル'];
 const WARMTH = ['', '真夏', '夏', '春秋', '秋冬', '真冬'];
-const FIELDS = ['name', 'category', 'subcategory', 'colors', 'material', 'pattern', 'formality', 'warmth', 'seasons', 'notes'];
+const FIELDS = ['name', 'brand', 'category', 'subcategory', 'colors', 'material', 'pattern', 'formality', 'warmth', 'seasons', 'notes'];
 
 // アイテムの編集フォーム。写真の差し替え・AI再解析・商品写真化もここでできる
 export default function ItemEditor({ initial, image, onSave, onCancel, saveLabel = '保存', extra }) {
   const [f, setF] = useState(() => ({
-    name: '', category: 'tops', subcategory: '', colors: [], material: '', pattern: '',
+    name: '', brand: '', category: 'tops', subcategory: '', colors: [], material: '', pattern: '',
     formality: 3, warmth: 3, seasons: [], notes: '', isFixed: false, ...initial,
   }));
   const [img, setImg] = useState(image || null);
@@ -34,12 +35,20 @@ export default function ItemEditor({ initial, image, onSave, onCancel, saveLabel
       const p = await getProfile();
       let r;
       try {
-        r = await prepareItemImage(files[0], { useCutout: p.useCutout });
+        r = await prepareItemImage(files[0], { useCutout: p.photoMode === 'cutout' });
       } catch {
         r = await prepareItemImage(files[0], { useCutout: false });
       }
+      let image = r.image;
+      if (p.photoMode === 'ai') {
+        try {
+          image = await makeProductPhoto(r.original, { name: f.name, category: f.category, brand: f.brand, onStage: setBusy });
+        } catch (e) {
+          setError(new Error(`商品写真化に失敗したので元の写真にしました（${e.message}）`));
+        }
+      }
       setPrevImg(img);
-      setImg(r.image);
+      setImg(image);
       setOriginal(r.original);
     });
 
@@ -54,10 +63,11 @@ export default function ItemEditor({ initial, image, onSave, onCancel, saveLabel
     });
 
   const productize = () =>
-    task('商品写真を生成中…（10〜30秒）', async () => {
-      const { image: out } = await api('productize', { image: await forAI(img, 1024), name: f.name });
+    task('AIが商品写真を撮影中…（10〜30秒）', async () => {
+      const src = original || initial?.original || img;
+      const out = await makeProductPhoto(src, { name: f.name, category: f.category, brand: f.brand, onStage: setBusy });
       setPrevImg(img);
-      setImg(await resize(base64ToBlob(out), 900, { type: 'image/jpeg', quality: 0.9 }));
+      setImg(out);
     });
 
   return (
@@ -78,7 +88,7 @@ export default function ItemEditor({ initial, image, onSave, onCancel, saveLabel
       <div className="row wrap editor-tools">
         <FilePick label={img ? '写真を差し替え' : '写真を追加'} onFiles={replace} className="btn btn-small" />
         {img && <button type="button" className="btn btn-small" onClick={reanalyze} disabled={!!busy}>AIで再解析</button>}
-        {img && <button type="button" className="btn btn-small" onClick={productize} disabled={!!busy}>✨ 商品写真化</button>}
+        {img && <button type="button" className="btn btn-small" onClick={productize} disabled={!!busy}>✨ AIで撮り直す</button>}
         {prevImg && <button type="button" className="btn btn-small btn-ghost" onClick={() => { setImg(prevImg); setPrevImg(null); setOriginal(null); }}>写真を元に戻す</button>}
       </div>
       {busy && <Spinner label={busy} />}
@@ -87,6 +97,10 @@ export default function ItemEditor({ initial, image, onSave, onCancel, saveLabel
       <label className="field">
         <span>名前</span>
         <input value={f.name} onChange={(e) => set('name', e.target.value)} placeholder="例: 白のオックスフォードシャツ" />
+      </label>
+      <label className="field">
+        <span>ブランド</span>
+        <input value={f.brand || ''} onChange={(e) => set('brand', e.target.value)} placeholder="例: Ralph Lauren（分からなければ空欄）" list="brand-list" />
       </label>
       <div className="field-row">
         <label className="field">

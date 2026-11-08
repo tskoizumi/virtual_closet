@@ -1,13 +1,14 @@
 import { useMemo, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { db, newId, compactItem, markWorn } from '../lib/db.js';
+import { db, newId, compactItem, markWorn, getProfile } from '../lib/db.js';
+import { makeProductPhoto } from '../lib/productPhoto.js';
 import { api } from '../lib/api.js';
 import { resize, forAI, cropBox } from '../lib/image.js';
 import { CATEGORY_LABEL } from '../lib/rules.js';
 import ItemEditor from './ItemEditor.jsx';
 import { BlobImg, ErrorBox, FilePick, Modal, Spinner, Thumb, useBlobUrl } from './ui.jsx';
 
-const FIELDS = ['name', 'category', 'subcategory', 'colors', 'material', 'pattern', 'formality', 'warmth', 'seasons', 'notes'];
+const FIELDS = ['name', 'brand', 'category', 'subcategory', 'colors', 'material', 'pattern', 'formality', 'warmth', 'seasons', 'notes'];
 
 // コーデ写真（着用写真）→ アイテムを検出 → 確認・編集 → まとめて登録
 export default function DetectFromPhoto({ onClose }) {
@@ -47,12 +48,32 @@ export default function DetectFromPhoto({ onClose }) {
         list.push({ key: newId(), fields, image, matchId: match, include: !match, partial: d.visibility === '一部が隠れている' });
       }
       if (!list.length) throw new Error('検出結果を切り出せませんでした。別の写真で試してください');
-      setDets(list);
+      const profile = await getProfile();
+      const ai = profile.photoMode === 'ai';
+      setDets(list.map((d) => ({ ...d, photoBusy: ai && !d.matchId })));
+      if (ai) productizeAll(list.filter((d) => !d.matchId));
     } catch (e) {
       setError(e);
     } finally {
       setBusy('');
     }
+  };
+
+  // 切り出した画像をAIで商品写真に撮り直す（3件ずつ並列）
+  const productizeAll = async (list) => {
+    const queue = [...list];
+    const worker = async () => {
+      while (queue.length) {
+        const d = queue.shift();
+        try {
+          const img = await makeProductPhoto(d.image, { name: d.fields.name, category: d.fields.category, brand: d.fields.brand });
+          update(d.key, { image: img, photoBusy: false });
+        } catch (e) {
+          update(d.key, { photoBusy: false, photoError: e.message });
+        }
+      }
+    };
+    await Promise.all([worker(), worker(), worker()]);
   };
 
   const update = (key, patch) => setDets((ds) => ds.map((d) => (d.key === key ? { ...d, ...patch } : d)));
@@ -120,15 +141,18 @@ export default function DetectFromPhoto({ onClose }) {
               <div key={d.key} className={`det ${d.include ? '' : 'is-off'}`}>
                 <button type="button" className="det-img" onClick={() => setEditing(d)}>
                   <BlobImg blob={d.image} alt={d.fields.name} />
+                  {d.photoBusy && <span className="det-busy"><span className="spinner" /></span>}
                 </button>
                 <div className="det-body">
                   <button type="button" className="det-name" onClick={() => setEditing(d)}>
                     {d.fields.name} <span className="muted small">✎</span>
                   </button>
                   <div className="muted small">
-                    {CATEGORY_LABEL[d.fields.category]} ・ {d.fields.colors?.join('/')} ・ {d.fields.material}
+                    {d.fields.brand ? `${d.fields.brand} ・ ` : ''}{CATEGORY_LABEL[d.fields.category]} ・ {d.fields.colors?.join('/')} ・ {d.fields.material}
                     {d.partial && ' ・ 一部隠れ'}
                   </div>
+                  {d.photoBusy && <div className="muted small">AIで商品写真に撮り直し中…</div>}
+                  {d.photoError && <div className="small" style={{ color: 'var(--bad)' }}>撮り直し失敗（切り出し画像のまま）</div>}
                   {d.matchId && (
                     <div className="det-match">
                       <Thumb item={byId[d.matchId]} size="xs" />
@@ -153,8 +177,8 @@ export default function DetectFromPhoto({ onClose }) {
             <span>このコーデを今日の着用記録として残す</span>
           </label>
           {!busy && (
-            <button className="btn btn-primary btn-block" onClick={save} disabled={count === 0 && !(recordWorn && dets.some((d) => d.matchId))}>
-              {count > 0 ? `選んだ${count}点を登録` : '着用記録だけ残す'}
+            <button className="btn btn-primary btn-block" onClick={save} disabled={dets.some((d) => d.include && d.photoBusy) || (count === 0 && !(recordWorn && dets.some((d) => d.matchId)))}>
+              {dets.some((d) => d.include && d.photoBusy) ? '商品写真を撮影中…' : count > 0 ? `選んだ${count}点を登録` : '着用記録だけ残す'}
             </button>
           )}
         </>
@@ -168,7 +192,7 @@ export default function DetectFromPhoto({ onClose }) {
             saveLabel="この内容にする"
             onCancel={() => setEditing(null)}
             onSave={({ image, original, ...fields }) => {
-              update(editing.key, { fields, image: image || editing.image, include: true });
+              update(editing.key, { fields, image: image || editing.image, include: true, photoBusy: false });
               setEditing(null);
             }}
           />

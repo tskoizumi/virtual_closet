@@ -4,7 +4,7 @@ import { db, markWorn } from '../lib/db.js';
 import { CATEGORY_LABEL } from '../lib/rules.js';
 import { Chips, Modal, Thumb } from './ui.jsx';
 import ItemEditor from './ItemEditor.jsx';
-import AddItem from './AddItem.jsx';
+import AddItem, { useUploadJobs } from './AddItem.jsx';
 import DetectFromPhoto from './DetectFromPhoto.jsx';
 
 const SORTS = [
@@ -27,9 +27,13 @@ export default function Closet({ addFiles, onAddHandled }) {
   const [adding, setAdding] = useState(false);
   const [detecting, setDetecting] = useState(false);
   const showAdd = adding || (addFiles && addFiles.length > 0);
+  const jobs = useUploadJobs();
+  const pending = jobs.filter((j) => j.status === 'working' || j.status === 'waiting').length;
+  const jobErrors = jobs.filter((j) => j.status === 'error').length;
+  const unchecked = items.filter((i) => i.unchecked).length;
 
   const list = useMemo(() => {
-    let l = cat ? items.filter((i) => i.category === cat) : items;
+    let l = cat === 'unchecked' ? items.filter((i) => i.unchecked) : cat ? items.filter((i) => i.category === cat) : items;
     l = [...l];
     if (sort === 'new') l.sort((a, b) => b.createdAt - a.createdAt);
     if (sort === 'unworn') l.sort((a, b) => (a.lastWornAt || 0) - (b.lastWornAt || 0));
@@ -61,6 +65,13 @@ export default function Closet({ addFiles, onAddHandled }) {
         </div>
       </div>
 
+      {(pending > 0 || jobErrors > 0) && (
+        <button className="upload-banner" onClick={() => setAdding(true)}>
+          {pending > 0 && <span className="spinner" />}
+          <span>{pending > 0 ? `${pending}点を登録処理中…` : ''}{jobErrors > 0 ? ` 失敗${jobErrors}点（タップで確認）` : ''}</span>
+        </button>
+      )}
+
       {items.length === 0 ? (
         <div className="empty">
           <p>まだ服が登録されていません。</p>
@@ -73,9 +84,12 @@ export default function Closet({ addFiles, onAddHandled }) {
       ) : (
         <>
           <Chips
-            options={Object.entries(CATEGORY_LABEL)
-              .filter(([k]) => counts[k])
-              .map(([k, v]) => ({ value: k, label: `${v} ${counts[k]}` }))}
+            options={[
+              ...(unchecked ? [{ value: 'unchecked', label: `未確認 ${unchecked}` }] : []),
+              ...Object.entries(CATEGORY_LABEL)
+                .filter(([k]) => counts[k])
+                .map(([k, v]) => ({ value: k, label: `${v} ${counts[k]}` })),
+            ]}
             value={cat}
             onChange={setCat}
           />
@@ -89,7 +103,8 @@ export default function Closet({ addFiles, onAddHandled }) {
           <div className="grid">
             {list.map((it) => (
               <div key={it.id} className="grid-cell">
-                <Thumb item={it} onClick={() => setEditing(it)} badge={it.isFixed ? '固定' : null} />
+                <Thumb item={it} onClick={() => setEditing(it)} badge={it.unchecked ? 'NEW' : it.isFixed ? '固定' : null} />
+                {it.brand && <div className="cell-brand">{it.brand}</div>}
                 <div className="cell-name">{it.name}</div>
                 <div className="cell-meta">{daysAgo(it.lastWornAt)} ・ {it.wearCount || 0}回</div>
               </div>
@@ -97,6 +112,10 @@ export default function Closet({ addFiles, onAddHandled }) {
           </div>
         </>
       )}
+
+      <datalist id="brand-list">
+        {[...new Set(items.map((i) => i.brand).filter(Boolean))].map((b) => <option key={b} value={b} />)}
+      </datalist>
 
       {editing && (
         <Modal title="アイテムを編集" onClose={() => setEditing(null)}>
@@ -107,7 +126,7 @@ export default function Closet({ addFiles, onAddHandled }) {
             onSave={async (f) => {
               const { id, ...rest } = f;
               if (!rest.original) delete rest.original;
-              await db.items.update(editing.id, rest);
+              await db.items.update(editing.id, { ...rest, unchecked: false });
               setEditing(null);
             }}
             extra={

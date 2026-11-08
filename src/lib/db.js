@@ -24,7 +24,7 @@ export const DEFAULT_PROFILE = {
   persona: 'balance',
   styleNotes: '',
   city: '東京',
-  useCutout: true,
+  photoMode: 'ai', // ai: AIで商品写真化＋透過 / cutout: 背景切り抜きのみ / none: そのまま
   recentDays: 3,
 };
 
@@ -45,6 +45,7 @@ export function compactItem(it) {
   return {
     id: it.id,
     name: it.name,
+    brand: it.brand || undefined,
     category: it.category,
     subcategory: it.subcategory,
     colors: it.colors,
