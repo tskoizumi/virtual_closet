@@ -19,6 +19,7 @@ export default function ItemEditor({ initial, image, onSave, onCancel, saveLabel
   }));
   const [img, setImg] = useState(image || null);
   const [prevImg, setPrevImg] = useState(null);
+  const [aiPhoto, setAiPhoto] = useState(false);
   const [original, setOriginal] = useState(null);
   const [busy, setBusy] = useState('');
   const [error, setError] = useState(null);
@@ -68,6 +69,8 @@ export default function ItemEditor({ initial, image, onSave, onCancel, saveLabel
       const out = await makeProductPhoto(src, { name: f.name, category: f.category, brand: f.brand, onStage: setBusy });
       setPrevImg(img);
       setImg(out);
+      setAiPhoto(true);
+      if (!original && initial?.original == null) setOriginal(src);
     });
 
   return (
@@ -77,7 +80,7 @@ export default function ItemEditor({ initial, image, onSave, onCancel, saveLabel
         e.preventDefault();
         if (!f.name.trim()) return alert('名前を入力してください');
         if (busy) return;
-        onSave({ ...f, formality: Number(f.formality), warmth: Number(f.warmth), image: img, ...(original ? { original } : {}) });
+        onSave({ ...f, formality: Number(f.formality), warmth: Number(f.warmth), image: img, ...(original ? { original } : {}), ...(aiPhoto ? { photoVersion: 2 } : {}) });
       }}
     >
       {img && (

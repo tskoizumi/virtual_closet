@@ -5,6 +5,7 @@ import { CATEGORY_LABEL } from '../lib/rules.js';
 import { Chips, Modal, Thumb } from './ui.jsx';
 import ItemEditor from './ItemEditor.jsx';
 import AddItem, { useUploadJobs } from './AddItem.jsx';
+import { enqueueRedo } from '../lib/uploadQueue.js';
 import DetectFromPhoto from './DetectFromPhoto.jsx';
 
 const SORTS = [
@@ -31,6 +32,7 @@ export default function Closet({ addFiles, onAddHandled }) {
   const pending = jobs.filter((j) => j.status === 'working' || j.status === 'waiting').length;
   const jobErrors = jobs.filter((j) => j.status === 'error').length;
   const unchecked = items.filter((i) => i.unchecked).length;
+  const oldPhotos = items.filter((i) => (i.photoVersion || 0) < 2);
 
   const list = useMemo(() => {
     let l = cat === 'unchecked' ? items.filter((i) => i.unchecked) : cat ? items.filter((i) => i.category === cat) : items;
@@ -68,8 +70,22 @@ export default function Closet({ addFiles, onAddHandled }) {
       {(pending > 0 || jobErrors > 0) && (
         <button className="upload-banner" onClick={() => setAdding(true)}>
           {pending > 0 && <span className="spinner" />}
-          <span>{pending > 0 ? `${pending}点を登録処理中…` : ''}{jobErrors > 0 ? ` 失敗${jobErrors}点（タップで確認）` : ''}</span>
+          <span>{pending > 0 ? `${pending}点を処理中…` : ''}{jobErrors > 0 ? ` 失敗${jobErrors}点（タップで確認）` : ''}</span>
         </button>
+      )}
+
+      {oldPhotos.length > 0 && pending === 0 && (
+        <div className="redo-box">
+          <span className="small">{oldPhotos.length}点がAI撮り直し前の写真です</span>
+          <button
+            className="btn btn-small btn-primary"
+            onClick={() => {
+              if (confirm(`${oldPhotos.length}点の写真を、公式ブティック風の商品写真にAIで撮り直します（1点ごとに画像生成APIを使います）。よろしいですか？`)) enqueueRedo(oldPhotos);
+            }}
+          >
+            ✨ まとめて撮り直す
+          </button>
+        </div>
       )}
 
       {items.length === 0 ? (

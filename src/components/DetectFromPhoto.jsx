@@ -45,7 +45,7 @@ export default function DetectFromPhoto({ onClose }) {
         const fields = {};
         FIELDS.forEach((k) => (fields[k] = d[k]));
         const match = d.matchId && byId[d.matchId] ? d.matchId : '';
-        list.push({ key: newId(), fields, image, matchId: match, include: !match, partial: d.visibility === '一部が隠れている' });
+        list.push({ key: newId(), fields, image, crop: image, matchId: match, include: !match, partial: d.visibility === '一部が隠れている' });
       }
       if (!list.length) throw new Error('検出結果を切り出せませんでした。別の写真で試してください');
       const profile = await getProfile();
@@ -67,7 +67,7 @@ export default function DetectFromPhoto({ onClose }) {
         const d = queue.shift();
         try {
           const img = await makeProductPhoto(d.image, { name: d.fields.name, category: d.fields.category, brand: d.fields.brand });
-          update(d.key, { image: img, photoBusy: false });
+          update(d.key, { image: img, photoBusy: false, aiPhoto: true });
         } catch (e) {
           update(d.key, { photoBusy: false, photoError: e.message });
         }
@@ -85,7 +85,7 @@ export default function DetectFromPhoto({ onClose }) {
       const newIds = [];
       for (const d of dets.filter((x) => x.include)) {
         const id = newId();
-        await db.items.add({ ...d.fields, isFixed: !!d.fields.isFixed, id, image: d.image, original: d.image, createdAt: now, wearCount: 0, lastWornAt: null });
+        await db.items.add({ ...d.fields, isFixed: !!d.fields.isFixed, id, image: d.image, original: d.crop || d.image, photoVersion: d.aiPhoto ? 2 : 0, createdAt: now, wearCount: 0, lastWornAt: null });
         newIds.push(id);
       }
       const matched = dets.filter((x) => !x.include && x.matchId).map((x) => x.matchId);

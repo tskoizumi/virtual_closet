@@ -31,6 +31,34 @@ export function enqueue(files) {
   pump();
 }
 
+// 登録済みアイテムの写真をAIで撮り直す
+export function enqueueRedo(items) {
+  for (const it of items) {
+    if (jobs.some((j) => j.redoId === it.id && j.status !== 'done' && j.status !== 'error')) continue;
+    jobs.push({ id: newId(), redoId: it.id, status: 'waiting', label: `${it.name}：待機中`, error: null, itemId: null });
+  }
+  emit();
+  pump();
+}
+
+async function redo(job) {
+  try {
+    const it = await db.items.get(job.redoId);
+    if (!it) throw new Error('アイテムが削除されています');
+    const src = it.original || it.image;
+    const image = await makeProductPhoto(src, {
+      name: it.name,
+      category: it.category,
+      brand: it.brand,
+      onStage: (l) => patch(job.id, { label: `${it.name}：${l}` }),
+    });
+    await db.items.update(it.id, { image, original: src, photoVersion: 2 });
+    patch(job.id, { status: 'done', label: '撮り直し完了', itemId: it.id });
+  } catch (e) {
+    patch(job.id, { status: 'error', label: '失敗', error: e.message || String(e) });
+  }
+}
+
 export function retry(id, opts = {}) {
   patch(id, { status: 'waiting', label: '待機中', error: null, ...opts });
   pump();
@@ -68,6 +96,7 @@ function pump() {
 }
 
 async function process(job) {
+  if (job.redoId) return redo(job);
   try {
     const profile = await getProfile();
     let { original, image, item } = job;
@@ -128,6 +157,7 @@ async function process(job) {
       wearCount: 0,
       lastWornAt: null,
       unchecked: true,
+      photoVersion: photoNote ? 0 : (job.forceMode || profile.photoMode) === 'ai' ? 2 : 0,
     });
     patch(job.id, { status: 'done', label: photoNote ? '登録完了（元写真）' : '登録完了', note: photoNote, itemId: id, file: null });
   } catch (e) {
