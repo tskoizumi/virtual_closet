@@ -19,14 +19,25 @@ function position(timeout = 8000) {
   });
 }
 
+// 地名 → 座標。日本語の地名に強い OpenStreetMap(Nominatim)を優先し、ダメなら Open-Meteo
+const geoCache = {};
 async function geocode(city) {
+  const q = (city || '東京').trim();
+  if (geoCache[q]) return geoCache[q];
+  try {
+    const r = await fetch(
+      `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q)}&format=json&limit=1&accept-language=ja`
+    );
+    const g = (await r.json())[0];
+    if (g) return (geoCache[q] = { lat: Number(g.lat), lon: Number(g.lon), label: q });
+  } catch {}
   const r = await fetch(
-    `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(city)}&count=1&language=ja&format=json`
+    `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(q)}&count=1&language=ja&format=json`
   );
   const j = await r.json();
   const g = j.results?.[0];
-  if (!g) throw new Error(`「${city}」の場所が見つかりませんでした（設定で地名を変えてください）`);
-  return { lat: g.latitude, lon: g.longitude, label: g.name };
+  if (!g) throw new Error(`「${q}」の場所が見つかりませんでした（設定で地名を変えてください）`);
+  return (geoCache[q] = { lat: g.latitude, lon: g.longitude, label: g.name });
 }
 
 export async function getWeather(city) {

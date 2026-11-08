@@ -20,6 +20,15 @@ export default function App() {
   const [banner, setBanner] = useState('');
 
   useEffect(() => {
+    const h = () => {
+      const t = location.hash.slice(1);
+      if (TABS.some((x) => x.key === t)) setTab(t);
+    };
+    window.addEventListener('hashchange', h);
+    return () => window.removeEventListener('hashchange', h);
+  }, []);
+
+  useEffect(() => {
     location.hash = tab;
     window.scrollTo(0, 0);
   }, [tab]);
