@@ -4,6 +4,7 @@ import { handler, generateJSON, imagePart, ITEM_SCHEMA } from '../../lib/gemini.
 export const onRequestPost = handler(async (body, env) => {
   const { result, model } = await generateJSON(env, {
     temperature: 0.2,
+    speed: 'fast',
     system: 'あなたはアパレルの商品登録担当。写真の服・靴・小物を1点だけ正確に分類し、日本語で属性を返す。',
     parts: [
       imagePart(body.image),

@@ -7,6 +7,10 @@ db.version(1).stores({
   outfits: 'id, createdAt',
   kv: 'key',
 });
+// 処理待ちの登録キュー（リロードしても続きから再開するため）
+db.version(2).stores({
+  jobs: 'id, createdAt',
+});
 
 export function newId() {
   return Math.random().toString(36).slice(2, 8) + Date.now().toString(36).slice(-2);

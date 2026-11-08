@@ -5,6 +5,7 @@ import Shop from './components/Shop.jsx';
 import Review from './components/Review.jsx';
 import Settings from './components/Settings.jsx';
 import { api } from './lib/api.js';
+import { restoreQueue } from './lib/uploadQueue.js';
 
 const TABS = [
   { key: 'today', label: '今日', icon: '☀' },
@@ -38,6 +39,7 @@ export default function App() {
       .then((h) => !h.hasKey && setBanner('サーバーに GEMINI_API_KEY が設定されていません。AI機能は使えません。'))
       .catch(() => setBanner('サーバーに接続できません。AI機能は使えません。'));
     if (navigator.storage?.persist) navigator.storage.persist();
+    restoreQueue();
   }, []);
 
   return (

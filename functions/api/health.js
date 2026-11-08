@@ -1,4 +1,4 @@
-import { json, textModels, imageModels } from '../../lib/gemini.js';
+import { json, textModels, imageModels, liteModels } from '../../lib/gemini.js';
 
 export async function onRequestGet({ env }) {
   return json({
@@ -6,6 +6,7 @@ export async function onRequestGet({ env }) {
     hasKey: Boolean(env.GEMINI_API_KEY),
     passcodeRequired: Boolean(env.APP_PASSCODE),
     textModels: textModels(env),
+    liteModels: liteModels(env),
     imageModels: imageModels(env),
   });
 }

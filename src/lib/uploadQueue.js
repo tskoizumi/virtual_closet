@@ -14,9 +14,37 @@ function emit() {
   const snap = jobs.map((j) => ({ ...j }));
   listeners.forEach((l) => l(snap));
 }
+const PERSIST_KEYS = ['file', 'redoId', 'original', 'image', 'item', 'forceMode', 'skipCut', 'createdAt'];
+function persist(job) {
+  const row = { id: job.id };
+  PERSIST_KEYS.forEach((k) => job[k] !== undefined && (row[k] = job[k]));
+  db.jobs.put(row).catch(() => {});
+}
 function patch(id, p) {
   jobs = jobs.map((j) => (j.id === id ? { ...j, ...p } : j));
   emit();
+  const j = jobs.find((x) => x.id === id);
+  if (!j) return;
+  if (j.status === 'done') db.jobs.delete(id).catch(() => {});
+  else if (PERSIST_KEYS.some((k) => k in p)) persist(j);
+}
+
+// 起動時: 前回終わらなかった処理を再開
+let restored = false;
+export async function restoreQueue() {
+  if (restored) return;
+  restored = true;
+  try {
+    const rows = await db.jobs.orderBy('createdAt').toArray();
+    for (const r of rows) {
+      if (jobs.some((j) => j.id === r.id)) continue;
+      jobs.push({ ...r, status: 'waiting', label: '再開待ち', error: null, itemId: null });
+    }
+    if (rows.length) {
+      emit();
+      pump();
+    }
+  } catch {}
 }
 
 export function subscribe(fn) {
@@ -26,7 +54,11 @@ export function subscribe(fn) {
 }
 
 export function enqueue(files) {
-  for (const file of files) jobs.push({ id: newId(), file, status: 'waiting', label: '待機中', error: null, itemId: null });
+  for (const file of files) {
+    const job = { id: newId(), file, createdAt: Date.now(), status: 'waiting', label: '待機中', error: null, itemId: null };
+    jobs.push(job);
+    persist(job);
+  }
   emit();
   pump();
 }
@@ -35,7 +67,9 @@ export function enqueue(files) {
 export function enqueueRedo(items) {
   for (const it of items) {
     if (jobs.some((j) => j.redoId === it.id && j.status !== 'done' && j.status !== 'error')) continue;
-    jobs.push({ id: newId(), redoId: it.id, status: 'waiting', label: `${it.name}：待機中`, error: null, itemId: null });
+    const job = { id: newId(), redoId: it.id, createdAt: Date.now(), status: 'waiting', label: `${it.name}：待機中`, error: null, itemId: null };
+    jobs.push(job);
+    persist(job);
   }
   emit();
   pump();
@@ -66,6 +100,7 @@ export function retry(id, opts = {}) {
 
 export function dismiss(id) {
   jobs = jobs.filter((j) => j.id !== id);
+  db.jobs.delete(id).catch(() => {});
   emit();
 }
 
@@ -147,7 +182,10 @@ async function process(job) {
       patch(job.id, { image });
     }
     const id = newId();
-    await db.items.add({
+    // アイテム保存とキュー削除を同時に行い、リロード時の二重登録を防ぐ
+    await db.transaction('rw', db.items, db.jobs, async () => {
+      await db.jobs.delete(job.id);
+      await db.items.add({
       ...item,
       isFixed: false,
       id,
@@ -158,6 +196,7 @@ async function process(job) {
       lastWornAt: null,
       unchecked: true,
       photoVersion: photoNote ? 0 : (job.forceMode || profile.photoMode) === 'ai' ? 2 : 0,
+      });
     });
     patch(job.id, { status: 'done', label: photoNote ? '登録完了（元写真）' : '登録完了', note: photoNote, itemId: id, file: null });
   } catch (e) {
