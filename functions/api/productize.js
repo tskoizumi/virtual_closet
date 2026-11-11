@@ -14,6 +14,9 @@ function modelLine(gender) {
 
 function shot(category, view, gender, item) {
   const back = view === 'back';
+  if (view === 'detail') {
+    return `公式サイトのディテールカット。「${item.focus || '特徴的な部分'}」に大きく寄ったクローズアップ（部分が画面の大半を占める）。素材の質感・縫製・金具の細部がはっきり分かる。${WORN.includes(category) ? '服はモデルが着用した状態のまま寄ってもよい（顔は写さない）。裏地なら前を少し開いて裏地を見せる' : '人は写さない'}`;
+  }
   const model = modelLine(gender);
   if (category === 'tops' || category === 'outer') {
     return back
@@ -41,7 +44,12 @@ function shot(category, view, gender, item) {
 
 // 写真（ハンガー・床置き・シワ・着用写真など何でもOK）→ 公式ブティックの商品写真
 export const onRequestPost = handler(async (body, env) => {
-  const { image, name = '', subcategory = '', category = 'other', brand = '', details = [], backDetail = '', view = 'front', gender = 'auto' } = body;
+  const { image, name = '', subcategory = '', category = 'other', brand = '', details = [], backDetail = '', view = 'front', gender = 'auto', focus = '', refs = [] } = body;
+  // refs: 同じアイテムの別の写真（デザイン確認用。構図はまねない）
+  const refParts = (Array.isArray(refs) ? refs : []).slice(0, 3).flatMap((r, i) => [
+    { text: `参考写真${i + 1}（同じアイテムの${r.label || '別の写真'}。デザイン・ロゴ・色の確認用で、構図や背景はまねない）` },
+    imagePart(r),
+  ]);
   const back = view === 'back';
   const worn = WORN.includes(category) || view === 'worn';
   const small = category === 'accessory';
@@ -51,15 +59,17 @@ export const onRequestPost = handler(async (body, env) => {
   const { image: out, model } = await generateImage(env, {
     aspectRatio: '3:4',
     parts: [
+      { text: '元の写真' },
       imagePart(image),
+      ...refParts,
       {
-        text: `この写真の${brand ? `${brand}の` : ''}「${name || 'アイテム'}」を、${brand || 'ハイブランド'}の公式オンラインブティックの商品ページに載っている${back ? '2枚目（背面）の' : view === 'worn' ? '2枚目（着用イメージ）の' : 'メインの'}商品写真として1枚生成して。
+        text: `この写真の${brand ? `${brand}の` : ''}「${name || 'アイテム'}」を、${brand || 'ハイブランド'}の公式オンラインブティックの商品ページに載っている${back ? '背面の' : view === 'worn' ? '着用イメージの' : view === 'detail' ? `ディテール（${focus || '部分アップ'}）の` : 'メインの'}商品写真として1枚生成して。
 
 ## 元の写真について
 元の写真はハンガー掛け・床置き・畳んだ状態・シワだらけ・着用中のスナップなど、条件の悪い写真の可能性がある。床置きでつぶれた形やヨレ・シワ・不自然な角度をそのまま写さず、このアイテム本来の形・丈・身幅・シルエットに正しく復元すること。
 
 ## 撮影
-- 構図: ${shot(category, view, gender, { name, subcategory })}
+- 構図: ${shot(category, view, gender, { name, subcategory, focus })}
 - 背景: ${BACKDROP}
 - ライティング: ハイブランドのEC撮影の、柔らかく均一なスタジオ光。${worn ? '足元にごく淡い自然な影のみ' : '被写体の下にごく淡い自然な接地影のみ'}
 - 質感: 織り・編み・起毛・革の艶・金具の光沢が分かる高精細な描写。色は元の写真に正確に合わせる（照明による色かぶりは補正）

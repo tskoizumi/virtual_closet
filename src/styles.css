@@ -224,3 +224,11 @@ h4 { font-size: 13px; letter-spacing: .08em; color: var(--ink-2); margin: 18px 0
 .editor-gallery { display: flex; gap: 10px; margin-bottom: 10px; flex-wrap: wrap; }
 .editor-shot { display: flex; flex-direction: column; align-items: center; gap: 4px; }
 .editor-shot img { width: 72px; aspect-ratio: 3 / 4; object-fit: cover; border-radius: 6px; background: #efeeeb; }
+.job-tap { position: relative; }
+.job-count { position: absolute; top: 6px; left: 6px; font-size: 10px; background: var(--ink); color: var(--bg); border-radius: 999px; padding: 1px 7px; }
+.pdp-styling { display: flex; flex-direction: column; gap: 12px; }
+.pdp-styling-row { display: flex; gap: 12px; align-items: flex-start; font-size: 13px; line-height: 1.7; }
+.pdp-styling-row img { width: 84px; aspect-ratio: 3 / 4; object-fit: cover; border-radius: 6px; flex-shrink: 0; }
+.pdp-photos { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 4px; }
+.pdp-photos figure { margin: 0; flex: 0 0 auto; width: 84px; font-size: 11px; color: var(--ink-2); }
+.pdp-photos img { width: 84px; aspect-ratio: 3 / 4; object-fit: cover; border-radius: 6px; display: block; margin-bottom: 3px; }

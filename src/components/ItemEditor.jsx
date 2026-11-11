@@ -3,7 +3,7 @@ import { CATEGORY_LABEL } from '../lib/rules.js';
 import { getProfile } from '../lib/db.js';
 import { api } from '../lib/api.js';
 import { forAI, prepareItemImage } from '../lib/image.js';
-import { makeProductPhoto, makeProductSet, PHOTO_VERSION } from '../lib/productPhoto.js';
+import { makeProductPhoto, makeProductSet, PHOTO_VERSION, ROLE_LABEL } from '../lib/productPhoto.js';
 import { resize } from '../lib/image.js';
 import { BlobImg, ErrorBox, FilePick, Spinner } from './ui.jsx';
 
@@ -19,6 +19,7 @@ export default function ItemEditor({ initial, image, onSave, onCancel, saveLabel
     formality: 3, warmth: 3, seasons: [], notes: '', isFixed: false, details: [], ...initial,
   }));
   const [gallery, setGallery] = useState(() => initial?.gallery || []);
+  const [photos, setPhotos] = useState(() => initial?.photos || []);
   const [img, setImg] = useState(image || null);
   const [prevImg, setPrevImg] = useState(null);
   const [aiPhoto, setAiPhoto] = useState(false);
@@ -56,9 +57,15 @@ export default function ItemEditor({ initial, image, onSave, onCancel, saveLabel
       setOriginal(r.original);
     });
 
+  const extrasForAI = async () => {
+    const ex = [];
+    for (const x of photos.slice(0, 6)) ex.push({ image: await forAI(x.image, x.role === 'tag' ? 1024 : 768), role: x.role, note: x.note });
+    return ex;
+  };
+
   const reanalyze = () =>
     task('AIが再解析中…', async () => {
-      const { item } = await api('tag', { image: await forAI(img) });
+      const { item } = await api('tag', { image: await forAI(original || initial?.original || img), extras: await extrasForAI() });
       setF((p) => {
         const n = { ...p };
         FIELDS.forEach((k) => item[k] !== undefined && (n[k] = item[k]));
@@ -69,29 +76,47 @@ export default function ItemEditor({ initial, image, onSave, onCancel, saveLabel
   const productize = () =>
     task('AIが商品写真を撮影中…（10〜30秒）', async () => {
       const src = original || initial?.original || img;
-      const set = await makeProductSet(src, f, { onStage: setBusy });
+      const set = await makeProductSet(src, f, { extras: photos, onStage: setBusy });
       setPrevImg(img);
       setImg(set.image);
-      // 自分で追加した写真は残し、AIが作った背面は入れ替える
+      // 以前の版で自分で追加した写真（originalつき）は残し、それ以外は作り直した写真に入れ替える
       setGallery((g) => [...set.gallery, ...g.filter((x) => x.original)]);
       setAiPhoto(true);
       if (!original && initial?.original == null) setOriginal(src);
     });
 
-  // 背面などの写真を追加（AIモードなら公式ブティック風に撮り直す）
-  const addShot = (files, view = 'back', label = '背面') =>
-    task('写真を処理中…', async () => {
+  // 写真を追加（背面・裏地やボタンのアップ・タグ・着こなし見本など）。AIが役割を判定して、必要なら公式ブティック風に撮り直す
+  const addPhotos = (files) =>
+    task('写真を確認中…', async () => {
       const p = await getProfile();
-      const src = await resize(files[0], 1600, { type: 'image/jpeg', quality: 0.88 });
-      let image = await resize(src, 1400, { type: 'image/jpeg', quality: 0.9 });
-      if (p.photoMode === 'ai') {
-        try {
-          image = await makeProductPhoto(src, { ...f, view, onStage: setBusy });
-        } catch (e) {
-          setError(new Error(`商品写真化に失敗したので元の写真にしました（${e.message}）`));
-        }
+      const srcs = [];
+      for (const file of files) srcs.push(await resize(file, 1600, { type: 'image/jpeg', quality: 0.88 }));
+      const main = original || initial?.original || img;
+      let roles;
+      try {
+        const images = [await forAI(main, 512)];
+        for (const b of srcs) images.push(await forAI(b, 512));
+        roles = (await api('group', { images, anchor: true })).photos;
+      } catch (e) {
+        setError(new Error(`写真の種類を判定できなかったので「ディテール」として追加しました（${e.message}）`));
+        roles = srcs.map((_, i) => ({ index: i + 1, role: 'detail', label: '追加写真', note: '' }));
       }
-      setGallery((g) => [...g, { label, image, original: src }]);
+      const added = roles.map((r) => ({ image: srcs[r.index - 1], role: r.role, label: r.label || ROLE_LABEL[r.role], note: r.note || '' }));
+      setPhotos((x) => [...x, ...added]);
+      const styling = added.filter((x) => x.role === 'styling' && x.note).map((x) => x.note);
+      if (styling.length) setF((x) => ({ ...x, stylingNotes: [x.stylingNotes, ...styling].filter(Boolean).join(' / ') }));
+      for (const x of added) {
+        if (!['back', 'detail', 'worn'].includes(x.role)) continue;
+        let image = await resize(x.image, 1400, { type: 'image/jpeg', quality: 0.9 });
+        if (p.photoMode === 'ai') {
+          try {
+            image = await makeProductPhoto(x.image, { ...f, view: x.role === 'detail' ? 'detail' : x.role, focus: x.note || x.label, refs: [{ image: main, label: '全体' }], onStage: setBusy });
+          } catch (e) {
+            setError(new Error(`商品写真化に失敗したので元の写真にしました（${e.message}）`));
+          }
+        }
+        setGallery((g) => [...g, { label: x.label, image }]);
+      }
     });
 
   return (
@@ -101,7 +126,7 @@ export default function ItemEditor({ initial, image, onSave, onCancel, saveLabel
         e.preventDefault();
         if (!f.name.trim()) return alert('名前を入力してください');
         if (busy) return;
-        onSave({ ...f, formality: Number(f.formality), warmth: Number(f.warmth), image: img, gallery, ...(original ? { original } : {}), ...(aiPhoto ? { photoVersion: PHOTO_VERSION } : {}) });
+        onSave({ ...f, formality: Number(f.formality), warmth: Number(f.warmth), image: img, gallery, photos, ...(original ? { original } : {}), ...(aiPhoto ? { photoVersion: PHOTO_VERSION } : {}) });
       }}
     >
       {img && (
@@ -124,13 +149,27 @@ export default function ItemEditor({ initial, image, onSave, onCancel, saveLabel
         <FilePick label={img ? '写真を差し替え' : '写真を追加'} onFiles={replace} className="btn btn-small" />
         {img && <button type="button" className="btn btn-small" onClick={reanalyze} disabled={!!busy}>AIで再解析</button>}
         {img && <button type="button" className="btn btn-small" onClick={productize} disabled={!!busy}>✨ AIで撮り直す</button>}
-        {img && (f.category === 'accessory'
-          ? <FilePick label="＋ 着用写真" onFiles={(x) => addShot(x, 'worn', '着用')} className="btn btn-small" />
-          : <FilePick label="＋ 背面の写真" onFiles={(x) => addShot(x)} className="btn btn-small" />)}
+        {img && <FilePick label="＋ 写真を追加（背面・裏地・ボタン・タグ・着こなし）" multiple onFiles={addPhotos} className="btn btn-small" />}
         {prevImg && <button type="button" className="btn btn-small btn-ghost" onClick={() => { setImg(prevImg); setPrevImg(null); setOriginal(null); }}>写真を元に戻す</button>}
       </div>
       {busy && <Spinner label={busy} />}
       <ErrorBox error={error} />
+      {photos.length > 0 && (
+        <div className="field">
+          <span>あなたが撮った写真（AIの判断材料・着こなし見本）</span>
+          <div className="editor-gallery">
+            {photos.map((x, i) => (
+              <div key={i} className="editor-shot">
+                <BlobImg blob={x.image} alt={x.label} />
+                <select value={x.role} onChange={(e) => setPhotos((ps) => ps.map((y, j) => (j === i ? { ...y, role: e.target.value } : y)))}>
+                  {Object.entries(ROLE_LABEL).filter(([k]) => k !== 'main').map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+                </select>
+                <button type="button" className="btn btn-small btn-ghost" onClick={() => setPhotos((ps) => ps.filter((_, j) => j !== i))}>削除</button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       <label className="field">
         <span>名前</span>
@@ -221,6 +260,10 @@ export default function ItemEditor({ initial, image, onSave, onCancel, saveLabel
       <label className="field">
         <span>背面の特徴（あれば）</span>
         <input value={f.backDetail || ''} onChange={(e) => set('backDetail', e.target.value)} placeholder="例: 背中上部に白い筆記体のプリント文字" />
+      </label>
+      <label className="field">
+        <span>いつもの着こなし（袖のまくり方・タックインなど。コーデ提案に反映）</span>
+        <input value={f.stylingNotes || ''} onChange={(e) => set('stylingNotes', e.target.value)} placeholder="例: 袖は2回折って肘下まで / 前だけタックイン" />
       </label>
       <label className="field">
         <span>メモ</span>

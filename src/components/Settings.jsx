@@ -7,6 +7,29 @@ import { PERSONAS } from '../lib/personas.js';
 import SyncPanel from './SyncPanel.jsx';
 import { BlobImg, ErrorBox, FilePick, Spinner } from './ui.jsx';
 
+// バックアップ用: 入れ子のどこにあるBlobも data URL に（読み込み時は逆に）変換する
+async function blobsToData(v) {
+  if (v instanceof Blob) return { $dataURL: await blobToDataURL(v) };
+  if (Array.isArray(v)) return Promise.all(v.map(blobsToData));
+  if (v && typeof v === 'object') {
+    const o = {};
+    for (const [k, x] of Object.entries(v)) o[k] = await blobsToData(x);
+    return o;
+  }
+  return v;
+}
+async function dataToBlobs(v) {
+  if (Array.isArray(v)) return Promise.all(v.map(dataToBlobs));
+  if (v && typeof v === 'object') {
+    if (typeof v.$dataURL === 'string') return dataURLToBlob(v.$dataURL);
+    const o = {};
+    for (const [k, x] of Object.entries(v)) o[k] = await dataToBlobs(x);
+    return o;
+  }
+  // 旧形式のバックアップ（image/original が data URL 文字列）
+  return v;
+}
+
 export default function Settings() {
   const [p, setP] = useState(null);
   const [pass, setPass] = useState(getPasscode());
@@ -36,9 +59,7 @@ export default function Settings() {
       const items = [];
       for (const it of await db.items.toArray()) {
         const { _dirty, ...row } = it;
-        const gallery = [];
-        for (const g of it.gallery || []) gallery.push({ ...g, image: await blobToDataURL(g.image), original: g.original ? await blobToDataURL(g.original) : null });
-        items.push({ ...row, gallery, image: await blobToDataURL(it.image), original: it.original ? await blobToDataURL(it.original) : null });
+        items.push(await blobsToData(row));
       }
       const outfits = [];
       for (const o of await db.outfits.toArray()) {
@@ -46,7 +67,7 @@ export default function Settings() {
         outfits.push({ ...row, tryon: o.tryon ? await blobToDataURL(o.tryon) : null });
       }
       const personPhoto = person ? await blobToDataURL(person) : null;
-      const blob = new Blob([JSON.stringify({ app: 'virtual_closet', version: 1, items, outfits, profile: p, personPhoto })], { type: 'application/json' });
+      const blob = new Blob([JSON.stringify({ app: 'virtual_closet', version: 2, items, outfits, profile: p, personPhoto })], { type: 'application/json' });
       const a = document.createElement('a');
       a.href = URL.createObjectURL(blob);
       a.download = `closet-backup-${new Date().toISOString().slice(0, 10)}.json`;
@@ -64,9 +85,13 @@ export default function Settings() {
       const j = JSON.parse(await file.text());
       if (j.app !== 'virtual_closet') throw new Error('このアプリのバックアップファイルではありません');
       for (const it of j.items || []) {
-        const gallery = [];
-        for (const g of it.gallery || []) gallery.push({ ...g, image: await dataURLToBlob(g.image), original: g.original ? await dataURLToBlob(g.original) : null });
-        await db.items.put({ ...it, gallery, image: await dataURLToBlob(it.image), original: it.original ? await dataURLToBlob(it.original) : null });
+        const row = await dataToBlobs(it);
+        // 旧形式（version 1）は image / original / gallery[].image が data URL の文字列
+        const fix = async (x) => (typeof x === 'string' && x.startsWith('data:') ? dataURLToBlob(x) : x);
+        row.image = await fix(row.image);
+        row.original = await fix(row.original);
+        if (Array.isArray(row.gallery)) row.gallery = await Promise.all(row.gallery.map(async (g) => ({ ...g, image: await fix(g.image), original: await fix(g.original) })));
+        await db.items.put(row);
       }
       for (const o of j.outfits || []) {
         await db.outfits.put({ ...o, tryon: o.tryon ? await dataURLToBlob(o.tryon) : null });

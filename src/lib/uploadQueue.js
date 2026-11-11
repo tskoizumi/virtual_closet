@@ -2,7 +2,7 @@
 import { db, newId, getProfile } from './db.js';
 import { resize, removeBg, trimTransparent, forAI } from './image.js';
 import { api } from './api.js';
-import { makeProductSet, PHOTO_VERSION } from './productPhoto.js';
+import { makeProductSet, plainGallery, PHOTO_VERSION } from './productPhoto.js';
 
 const TAG_CONCURRENCY = 3;
 let jobs = [];
@@ -14,7 +14,8 @@ function emit() {
   const snap = jobs.map((j) => ({ ...j }));
   listeners.forEach((l) => l(snap));
 }
-const PERSIST_KEYS = ['file', 'redoId', 'original', 'image', 'gallery', 'item', 'forceMode', 'skipCut', 'createdAt'];
+const PERSIST_KEYS = ['file', 'extras', 'groupBatch', 'redoId', 'original', 'image', 'gallery', 'item', 'forceMode', 'skipCut', 'createdAt'];
+const GROUP_CHUNK = 30;
 function persist(job) {
   const row = { id: job.id };
   PERSIST_KEYS.forEach((k) => job[k] !== undefined && (row[k] = job[k]));
@@ -36,12 +37,15 @@ export async function restoreQueue() {
   restored = true;
   try {
     const rows = await db.jobs.orderBy('createdAt').toArray();
+    const batches = new Set();
     for (const r of rows) {
       if (jobs.some((j) => j.id === r.id)) continue;
-      jobs.push({ ...r, status: 'waiting', label: '再開待ち', error: null, itemId: null });
+      if (r.groupBatch) batches.add(r.groupBatch);
+      jobs.push({ ...r, status: r.groupBatch ? 'grouping' : 'waiting', label: r.groupBatch ? '同じ服の写真をまとめ中…' : '再開待ち', error: null, itemId: null });
     }
     if (rows.length) {
       emit();
+      batches.forEach((b) => groupBatch(b));
       pump();
     }
   } catch {}
@@ -54,10 +58,53 @@ export function subscribe(fn) {
 }
 
 export function enqueue(files) {
-  for (const file of files) {
-    const job = { id: newId(), file, createdAt: Date.now(), status: 'waiting', label: '待機中', error: null, itemId: null };
+  files = [...files];
+  // 2枚以上なら、同じ服の写真（角度違い・裏地やボタンのアップ・タグ・着こなし見本）を先にまとめる
+  const batch = files.length >= 2 ? newId() : undefined;
+  const now = Date.now();
+  files.forEach((file, i) => {
+    const job = {
+      id: newId(), file, createdAt: now + i, error: null, itemId: null,
+      status: batch ? 'grouping' : 'waiting', label: batch ? '同じ服の写真をまとめ中…' : '待機中', groupBatch: batch,
+    };
     jobs.push(job);
     persist(job);
+  });
+  emit();
+  if (batch) groupBatch(batch);
+  else pump();
+}
+
+async function groupBatch(batch) {
+  const list = jobs.filter((j) => j.groupBatch === batch && j.status === 'grouping');
+  for (let i = 0; i < list.length; i += GROUP_CHUNK) {
+    const chunk = list.slice(i, i + GROUP_CHUNK);
+    try {
+      if (chunk.length < 2) throw new Error('skip');
+      const images = [];
+      for (const j of chunk) images.push(await forAI(j.file, 512));
+      const { groups } = await api('group', { images });
+      for (const g of groups) {
+        const main = g.photos.find((p) => p.role === 'main') || g.photos[0];
+        const extras = g.photos
+          .filter((p) => p !== main)
+          .map((p) => ({ file: chunk[p.index].file, role: p.role, label: p.label, note: p.note }));
+        const head = chunk[main.index];
+        // メインのジョブに追加写真として持たせてから（保存も）、まとめた写真のジョブを消す
+        patch(head.id, {
+          status: 'waiting', groupBatch: undefined, extras,
+          label: extras.length ? `待機中（${extras.length + 1}枚を1点にまとめました）` : '待機中',
+        });
+        for (const p of g.photos) if (p !== main) {
+          jobs = jobs.filter((j) => j.id !== chunk[p.index].id);
+          db.jobs.delete(chunk[p.index].id).catch(() => {});
+        }
+      }
+    } catch (e) {
+      // まとめられなくても1枚ずつ登録は続ける
+      const note = e.message === 'skip' ? '' : `（写真のまとめに失敗したので1枚ずつ登録: ${e.message}）`;
+      for (const j of chunk) patch(j.id, { status: 'waiting', groupBatch: undefined, label: `待機中${note}` });
+    }
   }
   emit();
   pump();
@@ -89,7 +136,7 @@ async function redo(job) {
       if (!it.brand && t.brand) Object.assign(info, { brand: t.brand, brandConfidence: t.brandConfidence });
       await db.items.update(it.id, info);
     }
-    const { image, gallery } = await makeProductSet(src, { ...it, ...info }, { onStage: (l) => patch(job.id, { label: `${it.name}：${l}` }) });
+    const { image, gallery } = await makeProductSet(src, { ...it, ...info }, { extras: it.photos || [], onStage: (l) => patch(job.id, { label: `${it.name}：${l}` }) });
     // ユーザーが自分で追加した写真（originalつき）は残し、AIが作った背面は作り直す
     const kept = (it.gallery || []).filter((g) => g.original);
     await db.items.update(it.id, { image, gallery: [...gallery, ...kept], original: src, photoVersion: PHOTO_VERSION });
@@ -145,13 +192,26 @@ async function process(job) {
       original = await resize(job.file, 1600, { type: 'image/jpeg', quality: 0.88 });
       patch(job.id, { original });
     }
+    // 同じアイテムの追加写真（縮小済みでなければ縮小して保存）
+    let extras = job.extras || [];
+    if (extras.some((x) => !x.image)) {
+      const out = [];
+      for (const x of extras) {
+        const { file, ...rest } = x;
+        out.push(x.image ? x : { ...rest, image: await resize(file, 1600, { type: 'image/jpeg', quality: 0.88 }) });
+      }
+      extras = out;
+      patch(job.id, { extras });
+    }
     // 1. 元の写真からAIで属性を解析
     if (!item) {
       patch(job.id, { label: 'AIが解析中…' });
+      const ex = [];
+      for (const x of extras.slice(0, 6)) ex.push({ image: await forAI(x.image, x.role === 'tag' ? 1024 : 768), role: x.role, note: x.note });
       try {
-        item = (await api('tag', { image: await forAI(original) })).item;
+        item = (await api('tag', { image: await forAI(original), extras: ex })).item;
       } catch {
-        item = (await api('tag', { image: await forAI(original) })).item; // 1回だけ再試行
+        item = (await api('tag', { image: await forAI(original), extras: ex })).item; // 1回だけ再試行
       }
       patch(job.id, { item });
     }
@@ -162,7 +222,7 @@ async function process(job) {
       const mode = job.forceMode || profile.photoMode || 'ai';
       if (mode === 'ai') {
         try {
-          ({ image, gallery } = await makeProductSet(original, item, { onStage: (l) => patch(job.id, { label: l }) }));
+          ({ image, gallery } = await makeProductSet(original, item, { extras, onStage: (l) => patch(job.id, { label: l }) }));
         } catch (e) {
           photoNote = `商品写真化に失敗したため元の写真で登録（${e.message}）`;
           image = await resize(original, 900, { type: 'image/jpeg', quality: 0.88 });
@@ -181,6 +241,7 @@ async function process(job) {
       } else {
         image = await resize(original, 900, { type: 'image/jpeg', quality: 0.88 });
       }
+      if (mode !== 'ai' || (photoNote && !gallery.length)) gallery = await plainGallery(extras);
       patch(job.id, { image, gallery });
     }
     const id = newId();
@@ -194,6 +255,7 @@ async function process(job) {
       image,
       gallery,
       original,
+      ...extraFields(extras),
       createdAt: Date.now(),
       wearCount: 0,
       lastWornAt: null,
@@ -207,8 +269,18 @@ async function process(job) {
   }
 }
 
+// 追加写真から、アイテムに残すもの（元写真と着こなしメモ）
+export function extraFields(extras) {
+  if (!extras?.length) return {};
+  const styling = extras.filter((x) => x.role === 'styling' && x.note).map((x) => x.note);
+  return {
+    photos: extras.map(({ image, role, label, note }) => ({ image, role, label: label || '', note: note || '' })),
+    ...(styling.length ? { stylingNotes: styling.join(' / ') } : {}),
+  };
+}
+
 // 手入力で登録するときの画像（解析だけ失敗したジョブ用）
 export function jobImages(id) {
   const j = jobs.find((x) => x.id === id);
-  return j ? { image: j.image || j.original, original: j.original, item: j.item, gallery: j.gallery || [] } : {};
+  return j ? { image: j.image || j.original, original: j.original, item: j.item, gallery: j.gallery || [], extra: extraFields((j.extras || []).filter((x) => x.image)) } : {};
 }

@@ -110,5 +110,6 @@ export function compactItem(it) {
     pattern: it.pattern,
     formality: it.formality,
     warmth: it.warmth,
+    styling: it.stylingNotes || undefined, // 本人の着こなし方（袖のまくり方など）
   };
 }

@@ -33,7 +33,7 @@ export default function Closet({ addFiles, onAddHandled }) {
   const [detecting, setDetecting] = useState(false);
   const showAdd = adding || (addFiles && addFiles.length > 0);
   const jobs = useUploadJobs();
-  const pending = jobs.filter((j) => j.status === 'working' || j.status === 'waiting').length;
+  const pending = jobs.filter((j) => ['working', 'waiting', 'grouping'].includes(j.status)).length;
   const jobErrors = jobs.filter((j) => j.status === 'error').length;
   const unchecked = items.filter((i) => i.unchecked).length;
   const oldPhotos = items.filter((i) => (i.photoVersion || 0) < PHOTO_VERSION);

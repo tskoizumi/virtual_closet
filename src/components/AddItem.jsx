@@ -37,13 +37,13 @@ export default function AddItem({ initialFiles = [], onClose }) {
   usePaste((f) => enqueue([f]));
 
   const done = jobs.filter((j) => j.status === 'done').length;
-  const working = jobs.filter((j) => j.status === 'working' || j.status === 'waiting').length;
+  const working = jobs.filter((j) => ['working', 'waiting', 'grouping'].includes(j.status)).length;
   const failed = jobs.filter((j) => j.status === 'error').length;
 
   return (
     <div className="add">
       <p className="muted">
-        写真をまとめて選ぶだけでOK。切り抜きとAI解析は裏で進めて、終わったものから自動でクローゼットに登録します（この画面を閉じても続きます）。内容はあとからタップで編集できます。
+        写真をまとめて選ぶだけでOK。同じ服の別角度・裏地やボタンのアップ・タグ・着こなし見本の写真が混ざっていても、AIが1点にまとめます。解析と撮影は裏で進めて、終わったものから自動でクローゼットに登録します（この画面を閉じても続きます）。内容はあとからタップで編集できます。
       </p>
       <div className="row">
         <FilePick label="📷 撮影" capture="environment" onFiles={enqueue} className="btn btn-primary" />
@@ -73,10 +73,11 @@ export default function AddItem({ initialFiles = [], onClose }) {
                     onClick={() => item && setEditing({ item })}
                   >
                     <JobThumb job={j} item={item} />
+                    {j.extras?.length > 0 && <span className="job-count">{j.extras.length + 1}枚</span>}
                     <div className="job-name">{item ? item.name : j.item ? `${j.item.name}：${j.label}` : j.label}</div>
                     {j.note && <div className="job-note">元の写真で登録（編集から再生成できます）</div>}
                   </button>
-                  {(j.status === 'working' || j.status === 'waiting') && <Spinner />}
+                  {(['working', 'waiting', 'grouping'].includes(j.status)) && <Spinner />}
                   {j.status === 'error' && (
                     <div className="job-err">
                       <p className="small">{j.error}</p>
@@ -108,7 +109,7 @@ export default function AddItem({ initialFiles = [], onClose }) {
                 setItems((m) => ({ ...m, [editing.item.id]: { ...editing.item, ...rest } }));
               } else {
                 const imgs = jobImages(editing.jobId);
-                await db.items.add({ ...f, id: newId(), image: f.image || imgs.image, original: f.original || imgs.original, createdAt: Date.now(), wearCount: 0, lastWornAt: null });
+                await db.items.add({ ...imgs.extra, ...f, id: newId(), image: f.image || imgs.image, original: f.original || imgs.original, createdAt: Date.now(), wearCount: 0, lastWornAt: null });
                 dismiss(editing.jobId);
               }
               setEditing(null);

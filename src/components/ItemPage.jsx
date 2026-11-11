@@ -15,6 +15,8 @@ function daysAgo(t) {
 // ブランド公式オンラインブティックの商品ページ風の詳細表示
 export default function ItemPage({ item, onEdit, onWorn, onDelete }) {
   const shots = [{ label: 'メイン', image: item.image }, ...(item.gallery || [])].filter((s) => s.image);
+  const styling = (item.photos || []).filter((x) => x.role === 'styling');
+  const others = (item.photos || []).filter((x) => x.role !== 'styling');
   const [idx, setIdx] = useState(0);
   const track = useRef(null);
   const go = (i) => {
@@ -92,6 +94,35 @@ export default function ItemPage({ item, onEdit, onWorn, onDelete }) {
               {(item.details || []).map((d, i) => <li key={i}>{d}</li>)}
               {item.backDetail && !(item.details || []).some((d) => d.includes(item.backDetail)) && <li>背面: {item.backDetail}</li>}
             </ul>
+          </>
+        )}
+
+        {(item.stylingNotes || styling.length > 0) && (
+          <>
+            <h4>いつもの着こなし</h4>
+            <div className="pdp-styling">
+              {styling.map((x, i) => (
+                <div key={i} className="pdp-styling-row">
+                  <BlobImg blob={x.image} alt={x.label} />
+                  <span>{x.note || x.label}</span>
+                </div>
+              ))}
+              {item.stylingNotes && !styling.length && <p className="pdp-desc">{item.stylingNotes}</p>}
+            </div>
+          </>
+        )}
+
+        {others.length > 0 && (
+          <>
+            <h4>あなたが撮った写真</h4>
+            <div className="pdp-photos">
+              {others.map((x, i) => (
+                <figure key={i}>
+                  <BlobImg blob={x.image} alt={x.label} />
+                  <figcaption>{x.label}</figcaption>
+                </figure>
+              ))}
+            </div>
           </>
         )}
 
