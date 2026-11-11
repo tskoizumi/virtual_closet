@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { db, newId } from '../lib/db.js';
-import { subscribe, enqueue, retry, dismiss, clearFinished, jobImages, confirmGroup, confirmAll } from '../lib/uploadQueue.js';
+import { subscribe, enqueue, retry, dismiss, clearFinished, jobImages, confirmGroup, confirmAll, retryFailed } from '../lib/uploadQueue.js';
 import { ROLE_LABEL } from '../lib/productPhoto.js';
 import ItemEditor from './ItemEditor.jsx';
 import { BlobImg, FilePick, Modal, Spinner, usePaste, useBlobUrl } from './ui.jsx';
@@ -108,6 +108,7 @@ export default function AddItem({ initialFiles = [], onClose }) {
               {working > 0 && ` ・ 処理中 ${working}`}
               {failed > 0 && ` ・ 失敗 ${failed}`}
             </span>
+            {failed > 1 && <button className="btn btn-small" onClick={retryFailed}>失敗をまとめて再試行</button>}
             {done > 0 && working === 0 && <button className="btn btn-small btn-ghost" onClick={clearFinished}>完了分を消す</button>}
           </div>
           <div className="job-grid">

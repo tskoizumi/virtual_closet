@@ -177,6 +177,12 @@ async function redo(job) {
   }
 }
 
+// 失敗したものをまとめて再試行
+export function retryFailed() {
+  jobs.filter((j) => j.status === 'error').forEach((j) => patch(j.id, { status: 'waiting', label: '待機中', error: null }));
+  pump();
+}
+
 export function retry(id, opts = {}) {
   patch(id, { status: 'waiting', label: '待機中', error: null, ...opts });
   pump();
