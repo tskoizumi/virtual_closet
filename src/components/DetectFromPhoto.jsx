@@ -1,14 +1,14 @@
 import { useMemo, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db, newId, compactItem, markWorn, getProfile } from '../lib/db.js';
-import { makeProductPhoto } from '../lib/productPhoto.js';
+import { makeProductSet, PHOTO_VERSION } from '../lib/productPhoto.js';
 import { api } from '../lib/api.js';
 import { resize, forAI, cropBox } from '../lib/image.js';
 import { CATEGORY_LABEL } from '../lib/rules.js';
 import ItemEditor from './ItemEditor.jsx';
 import { BlobImg, ErrorBox, FilePick, Modal, Spinner, Thumb, useBlobUrl } from './ui.jsx';
 
-const FIELDS = ['name', 'brand', 'category', 'subcategory', 'colors', 'material', 'pattern', 'formality', 'warmth', 'seasons', 'notes'];
+const FIELDS = ['name', 'brand', 'brandConfidence', 'category', 'subcategory', 'colors', 'material', 'pattern', 'formality', 'warmth', 'seasons', 'notes', 'details', 'shownSide', 'backDetail'];
 
 // コーデ写真（着用写真）→ アイテムを検出 → 確認・編集 → まとめて登録
 export default function DetectFromPhoto({ onClose }) {
@@ -66,8 +66,8 @@ export default function DetectFromPhoto({ onClose }) {
       while (queue.length) {
         const d = queue.shift();
         try {
-          const img = await makeProductPhoto(d.image, { name: d.fields.name, category: d.fields.category, brand: d.fields.brand });
-          update(d.key, { image: img, photoBusy: false, aiPhoto: true });
+          const { image, gallery } = await makeProductSet(d.image, d.fields);
+          update(d.key, { image, gallery, photoBusy: false, aiPhoto: true });
         } catch (e) {
           update(d.key, { photoBusy: false, photoError: e.message });
         }
@@ -85,7 +85,7 @@ export default function DetectFromPhoto({ onClose }) {
       const newIds = [];
       for (const d of dets.filter((x) => x.include)) {
         const id = newId();
-        await db.items.add({ ...d.fields, isFixed: !!d.fields.isFixed, id, image: d.image, original: d.crop || d.image, photoVersion: d.aiPhoto ? 2 : 0, createdAt: now, wearCount: 0, lastWornAt: null });
+        await db.items.add({ ...d.fields, isFixed: !!d.fields.isFixed, id, image: d.image, gallery: d.gallery || [], original: d.crop || d.image, photoVersion: d.aiPhoto ? PHOTO_VERSION : 0, createdAt: now, wearCount: 0, lastWornAt: null });
         newIds.push(id);
       }
       const matched = dets.filter((x) => !x.include && x.matchId).map((x) => x.matchId);
@@ -148,7 +148,7 @@ export default function DetectFromPhoto({ onClose }) {
                     {d.fields.name} <span className="muted small">✎</span>
                   </button>
                   <div className="muted small">
-                    {d.fields.brand ? `${d.fields.brand} ・ ` : ''}{CATEGORY_LABEL[d.fields.category]} ・ {d.fields.colors?.join('/')} ・ {d.fields.material}
+                    {d.fields.brand ? `${d.fields.brand}${d.fields.brandConfidence === 'guess' ? '(推測)' : ''} ・ ` : ''}{CATEGORY_LABEL[d.fields.category]} ・ {d.fields.colors?.join('/')} ・ {d.fields.material}
                     {d.partial && ' ・ 一部隠れ'}
                   </div>
                   {d.photoBusy && <div className="muted small">AIで商品写真に撮り直し中…</div>}
@@ -187,12 +187,12 @@ export default function DetectFromPhoto({ onClose }) {
       {editing && (
         <Modal title="検出アイテムを編集" onClose={() => setEditing(null)}>
           <ItemEditor
-            initial={editing.fields}
+            initial={{ ...editing.fields, gallery: editing.gallery || [], original: editing.crop }}
             image={editing.image}
             saveLabel="この内容にする"
             onCancel={() => setEditing(null)}
-            onSave={({ image, original, ...fields }) => {
-              update(editing.key, { fields, image: image || editing.image, include: true, photoBusy: false });
+            onSave={({ image, original, gallery, photoVersion, ...fields }) => {
+              update(editing.key, { fields, image: image || editing.image, gallery: gallery || editing.gallery, ...(photoVersion ? { aiPhoto: true } : {}), include: true, photoBusy: false });
               setEditing(null);
             }}
           />

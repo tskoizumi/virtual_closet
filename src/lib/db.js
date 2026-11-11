@@ -82,6 +82,7 @@ export const DEFAULT_PROFILE = {
   city: '東京',
   photoMode: 'ai', // ai: AIで商品写真化＋透過 / cutout: 背景切り抜きのみ / none: そのまま
   recentDays: 3,
+  modelGender: 'auto', // 商品写真のモデル: auto / mens / womens
 };
 
 export async function getProfile() {

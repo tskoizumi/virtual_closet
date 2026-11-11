@@ -36,7 +36,9 @@ export default function Settings() {
       const items = [];
       for (const it of await db.items.toArray()) {
         const { _dirty, ...row } = it;
-        items.push({ ...row, image: await blobToDataURL(it.image), original: it.original ? await blobToDataURL(it.original) : null });
+        const gallery = [];
+        for (const g of it.gallery || []) gallery.push({ ...g, image: await blobToDataURL(g.image), original: g.original ? await blobToDataURL(g.original) : null });
+        items.push({ ...row, gallery, image: await blobToDataURL(it.image), original: it.original ? await blobToDataURL(it.original) : null });
       }
       const outfits = [];
       for (const o of await db.outfits.toArray()) {
@@ -62,7 +64,9 @@ export default function Settings() {
       const j = JSON.parse(await file.text());
       if (j.app !== 'virtual_closet') throw new Error('このアプリのバックアップファイルではありません');
       for (const it of j.items || []) {
-        await db.items.put({ ...it, image: await dataURLToBlob(it.image), original: it.original ? await dataURLToBlob(it.original) : null });
+        const gallery = [];
+        for (const g of it.gallery || []) gallery.push({ ...g, image: await dataURLToBlob(g.image), original: g.original ? await dataURLToBlob(g.original) : null });
+        await db.items.put({ ...it, gallery, image: await dataURLToBlob(it.image), original: it.original ? await dataURLToBlob(it.original) : null });
       }
       for (const o of j.outfits || []) {
         await db.outfits.put({ ...o, tryon: o.tryon ? await dataURLToBlob(o.tryon) : null });
@@ -125,7 +129,7 @@ export default function Settings() {
         <div className="field">
           <span>登録時の写真の扱い</span>
           {[
-            ['ai', 'AIで商品写真に撮り直す（おすすめ）', 'ハンガーや床が写っていてもOK。プロ品質の写真を生成して背景を透過。1点ごとに画像生成APIを使います'],
+            ['ai', 'AIで公式ブティック風に撮り直す（おすすめ）', 'ハンガー・床置き・シワがあってもOK。服はモデル着用のクロップ、靴やバッグはスタジオ撮影に。背面に特徴があれば2枚目も作ります。1枚ごとに画像生成APIを使います'],
             ['cutout', '背景だけ切り抜く', 'APIを使わずブラウザ内で処理。ハンガーなどは残ることがあります'],
             ['none', 'そのまま', '撮った写真をそのまま使う'],
           ].map(([v, l, d]) => (
@@ -135,6 +139,16 @@ export default function Settings() {
             </label>
           ))}
         </div>
+        {p.photoMode === 'ai' && (
+          <div className="field">
+            <span>商品写真のモデル</span>
+            <div className="chips">
+              {[['auto', '服に合わせて自動'], ['mens', 'メンズ'], ['womens', 'レディース']].map(([v, l]) => (
+                <button key={v} type="button" className={`chip ${(p.modelGender || 'auto') === v ? 'is-active' : ''}`} onClick={() => update('modelGender', v)}>{l}</button>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
 
       <div className="panel">

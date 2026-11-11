@@ -98,7 +98,7 @@ export default function AddItem({ initialFiles = [], onClose }) {
       {editing && (
         <Modal title="アイテムを編集" onClose={() => setEditing(null)}>
           <ItemEditor
-            initial={editing.item || jobImages(editing.jobId).item || {}}
+            initial={editing.item || { ...(jobImages(editing.jobId).item || {}), gallery: jobImages(editing.jobId).gallery }}
             image={editing.item ? editing.item.image : jobImages(editing.jobId).image}
             onCancel={() => setEditing(null)}
             onSave={async (f) => {

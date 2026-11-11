@@ -192,3 +192,35 @@ h4 { font-size: 13px; letter-spacing: .08em; color: var(--ink-2); margin: 18px 0
 .cell-brand { font-family: var(--serif); font-size: 12px; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-2); margin-top: 6px; line-height: 1.1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .cell-brand + .cell-name { margin-top: 0; }
 .redo-box { display: flex; align-items: center; justify-content: space-between; gap: 10px; background: var(--paper); border: 1px dashed var(--accent); border-radius: 12px; padding: 10px 14px; margin-bottom: 12px; }
+
+/* ---- アイテム詳細（公式ブティックの商品ページ風） ---- */
+.grid .thumb { aspect-ratio: 3 / 4; padding: 0; background: #efeeeb; }
+.pdp { margin: -16px -16px 0; }
+.pdp-gallery { position: relative; background: #efeeeb; }
+.pdp-track { display: flex; overflow-x: auto; scroll-snap-type: x mandatory; scrollbar-width: none; }
+.pdp-track::-webkit-scrollbar { display: none; }
+.pdp-slide { flex: 0 0 100%; scroll-snap-align: center; aspect-ratio: 3 / 4; display: flex; align-items: center; justify-content: center; }
+.pdp-slide img { width: 100%; height: 100%; object-fit: contain; }
+.pdp-dots { position: absolute; bottom: 12px; left: 0; right: 0; display: flex; justify-content: center; gap: 6px; }
+.pdp-dots button { width: 6px; height: 6px; border-radius: 50%; border: none; padding: 0; background: rgba(22,21,20,.25); }
+.pdp-dots button.is-active { background: var(--ink); }
+.pdp-thumbs { display: flex; gap: 6px; padding: 10px 16px 0; }
+.pdp-thumbs button { width: 52px; aspect-ratio: 3 / 4; padding: 0; border: 1px solid transparent; background: #efeeeb; border-radius: 4px; overflow: hidden; opacity: .6; }
+.pdp-thumbs button.is-active { border-color: var(--ink); opacity: 1; }
+.pdp-thumbs img { width: 100%; height: 100%; object-fit: cover; }
+.pdp-info { padding: 18px 16px 4px; }
+.pdp-brand { font-family: var(--serif); font-size: 13px; letter-spacing: .14em; text-transform: uppercase; display: flex; align-items: center; gap: 8px; }
+.pdp-guess { font-family: inherit; font-size: 10px; letter-spacing: .04em; text-transform: none; border: 1px solid var(--line); border-radius: 999px; padding: 1px 7px; color: var(--ink-2); }
+.pdp-name { font-family: var(--mincho); font-size: 20px; font-weight: 500; margin: 6px 0 4px; }
+.pdp-actions { display: flex; gap: 8px; margin: 16px 0; }
+.pdp-actions .btn { flex: 1; }
+.pdp-desc { font-size: 14px; line-height: 1.8; }
+.pdp-details { margin: 0; padding-left: 18px; font-size: 13px; line-height: 1.9; }
+.pdp-specs { margin: 0; font-size: 13px; }
+.pdp-specs div { display: flex; border-bottom: 1px solid var(--line); padding: 9px 0; }
+.pdp-specs dt { width: 84px; color: var(--ink-2); flex-shrink: 0; }
+.pdp-specs dd { margin: 0; }
+.pdp-delete { margin-top: 18px; }
+.editor-gallery { display: flex; gap: 10px; margin-bottom: 10px; flex-wrap: wrap; }
+.editor-shot { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.editor-shot img { width: 72px; aspect-ratio: 3 / 4; object-fit: cover; border-radius: 6px; background: #efeeeb; }

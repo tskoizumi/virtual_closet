@@ -4,8 +4,10 @@ import { db, markWorn } from '../lib/db.js';
 import { CATEGORY_LABEL } from '../lib/rules.js';
 import { Chips, Modal, Thumb } from './ui.jsx';
 import ItemEditor from './ItemEditor.jsx';
+import ItemPage from './ItemPage.jsx';
 import AddItem, { useUploadJobs } from './AddItem.jsx';
 import { enqueueRedo } from '../lib/uploadQueue.js';
+import { PHOTO_VERSION } from '../lib/productPhoto.js';
 import DetectFromPhoto from './DetectFromPhoto.jsx';
 
 const SORTS = [
@@ -24,6 +26,8 @@ export default function Closet({ addFiles, onAddHandled }) {
   const items = useLiveQuery(() => db.items.toArray(), []) || [];
   const [cat, setCat] = useState('');
   const [sort, setSort] = useState('new');
+  const [viewingId, setViewingId] = useState(null);
+  const viewing = viewingId ? items.find((i) => i.id === viewingId) : null;
   const [editing, setEditing] = useState(null);
   const [adding, setAdding] = useState(false);
   const [detecting, setDetecting] = useState(false);
@@ -32,7 +36,7 @@ export default function Closet({ addFiles, onAddHandled }) {
   const pending = jobs.filter((j) => j.status === 'working' || j.status === 'waiting').length;
   const jobErrors = jobs.filter((j) => j.status === 'error').length;
   const unchecked = items.filter((i) => i.unchecked).length;
-  const oldPhotos = items.filter((i) => (i.photoVersion || 0) < 2);
+  const oldPhotos = items.filter((i) => (i.photoVersion || 0) < PHOTO_VERSION);
 
   const list = useMemo(() => {
     let l = cat === 'unchecked' ? items.filter((i) => i.unchecked) : cat ? items.filter((i) => i.category === cat) : items;
@@ -76,7 +80,7 @@ export default function Closet({ addFiles, onAddHandled }) {
 
       {oldPhotos.length > 0 && pending === 0 && (
         <div className="redo-box">
-          <span className="small">{oldPhotos.length}点がAI撮り直し前の写真です</span>
+          <span className="small">{oldPhotos.length}点が公式ブティック風の撮り直し前の写真です</span>
           <button
             className="btn btn-small btn-primary"
             onClick={() => {
@@ -119,8 +123,8 @@ export default function Closet({ addFiles, onAddHandled }) {
           <div className="grid">
             {list.map((it) => (
               <div key={it.id} className="grid-cell">
-                <Thumb item={it} onClick={() => setEditing(it)} badge={it.unchecked ? 'NEW' : it.isFixed ? '固定' : null} />
-                {it.brand && <div className="cell-brand">{it.brand}</div>}
+                <Thumb item={it} onClick={() => (it.unchecked ? setEditing(it) : setViewingId(it.id))} badge={it.unchecked ? 'NEW' : it.isFixed ? '固定' : null} />
+                {it.brand && <div className="cell-brand">{it.brand}{it.brandConfidence === 'guess' ? ' ?' : ''}</div>}
                 <div className="cell-name">{it.name}</div>
                 <div className="cell-meta">{daysAgo(it.lastWornAt)} ・ {it.wearCount || 0}回</div>
               </div>
@@ -132,6 +136,22 @@ export default function Closet({ addFiles, onAddHandled }) {
       <datalist id="brand-list">
         {[...new Set(items.map((i) => i.brand).filter(Boolean))].map((b) => <option key={b} value={b} />)}
       </datalist>
+
+      {viewing && !editing && (
+        <Modal title={CATEGORY_LABEL[viewing.category] || 'アイテム'} onClose={() => setViewingId(null)}>
+          <ItemPage
+            item={viewing}
+            onEdit={() => setEditing(viewing)}
+            onWorn={async () => { await markWorn([viewing.id]); setViewingId(null); }}
+            onDelete={async () => {
+              if (confirm(`「${viewing.name}」を削除しますか？`)) {
+                await db.items.delete(viewing.id);
+                setViewingId(null);
+              }
+            }}
+          />
+        </Modal>
+      )}
 
       {editing && (
         <Modal title="アイテムを編集" onClose={() => setEditing(null)}>
@@ -146,10 +166,7 @@ export default function Closet({ addFiles, onAddHandled }) {
               setEditing(null);
             }}
             extra={
-              <>
-                <button type="button" className="btn btn-ghost" onClick={async () => { await markWorn([editing.id]); setEditing(null); }}>
-                  今日着た
-                </button>
+              !viewingId && (
                 <button
                   type="button"
                   className="btn btn-danger"
@@ -162,7 +179,7 @@ export default function Closet({ addFiles, onAddHandled }) {
                 >
                   削除
                 </button>
-              </>
+              )
             }
           />
         </Modal>

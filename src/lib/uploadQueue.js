@@ -2,7 +2,7 @@
 import { db, newId, getProfile } from './db.js';
 import { resize, removeBg, trimTransparent, forAI } from './image.js';
 import { api } from './api.js';
-import { makeProductPhoto } from './productPhoto.js';
+import { makeProductSet, PHOTO_VERSION } from './productPhoto.js';
 
 const TAG_CONCURRENCY = 3;
 let jobs = [];
@@ -14,7 +14,7 @@ function emit() {
   const snap = jobs.map((j) => ({ ...j }));
   listeners.forEach((l) => l(snap));
 }
-const PERSIST_KEYS = ['file', 'redoId', 'original', 'image', 'item', 'forceMode', 'skipCut', 'createdAt'];
+const PERSIST_KEYS = ['file', 'redoId', 'original', 'image', 'gallery', 'item', 'forceMode', 'skipCut', 'createdAt'];
 function persist(job) {
   const row = { id: job.id };
   PERSIST_KEYS.forEach((k) => job[k] !== undefined && (row[k] = job[k]));
@@ -80,13 +80,19 @@ async function redo(job) {
     const it = await db.items.get(job.redoId);
     if (!it) throw new Error('アイテムが削除されています');
     const src = it.original || it.image;
-    const image = await makeProductPhoto(src, {
-      name: it.name,
-      category: it.category,
-      brand: it.brand,
-      onStage: (l) => patch(job.id, { label: `${it.name}：${l}` }),
-    });
-    await db.items.update(it.id, { image, original: src, photoVersion: 2 });
+    // 古いアイテムはロゴなどのディテール情報が無いので、先に元写真から読み取る
+    let info = {};
+    if (!Array.isArray(it.details)) {
+      patch(job.id, { label: `${it.name}：ロゴやディテールを確認中…` });
+      const { item: t } = await api('tag', { image: await forAI(src) });
+      info = { details: t.details, shownSide: t.shownSide, backDetail: t.backDetail };
+      if (!it.brand && t.brand) Object.assign(info, { brand: t.brand, brandConfidence: t.brandConfidence });
+      await db.items.update(it.id, info);
+    }
+    const { image, gallery } = await makeProductSet(src, { ...it, ...info }, { onStage: (l) => patch(job.id, { label: `${it.name}：${l}` }) });
+    // ユーザーが自分で追加した写真（originalつき）は残し、AIが作った背面は作り直す
+    const kept = (it.gallery || []).filter((g) => g.original);
+    await db.items.update(it.id, { image, gallery: [...gallery, ...kept], original: src, photoVersion: PHOTO_VERSION });
     patch(job.id, { status: 'done', label: '撮り直し完了', itemId: it.id });
   } catch (e) {
     patch(job.id, { status: 'error', label: '失敗', error: e.message || String(e) });
@@ -151,16 +157,12 @@ async function process(job) {
     }
     // 2. 写真を整える
     let photoNote = '';
+    let gallery = job.gallery || [];
     if (!image) {
       const mode = job.forceMode || profile.photoMode || 'ai';
       if (mode === 'ai') {
         try {
-          image = await makeProductPhoto(original, {
-            name: item.name,
-            category: item.category,
-            brand: item.brand,
-            onStage: (l) => patch(job.id, { label: l }),
-          });
+          ({ image, gallery } = await makeProductSet(original, item, { onStage: (l) => patch(job.id, { label: l }) }));
         } catch (e) {
           photoNote = `商品写真化に失敗したため元の写真で登録（${e.message}）`;
           image = await resize(original, 900, { type: 'image/jpeg', quality: 0.88 });
@@ -179,7 +181,7 @@ async function process(job) {
       } else {
         image = await resize(original, 900, { type: 'image/jpeg', quality: 0.88 });
       }
-      patch(job.id, { image });
+      patch(job.id, { image, gallery });
     }
     const id = newId();
     // アイテム保存とキュー削除を同時に行い、リロード時の二重登録を防ぐ
@@ -190,12 +192,13 @@ async function process(job) {
       isFixed: false,
       id,
       image,
+      gallery,
       original,
       createdAt: Date.now(),
       wearCount: 0,
       lastWornAt: null,
       unchecked: true,
-      photoVersion: photoNote ? 0 : (job.forceMode || profile.photoMode) === 'ai' ? 2 : 0,
+      photoVersion: photoNote ? 0 : (job.forceMode || profile.photoMode) === 'ai' ? PHOTO_VERSION : 0,
       });
     });
     patch(job.id, { status: 'done', label: photoNote ? '登録完了（元写真）' : '登録完了', note: photoNote, itemId: id, file: null });
@@ -207,5 +210,5 @@ async function process(job) {
 // 手入力で登録するときの画像（解析だけ失敗したジョブ用）
 export function jobImages(id) {
   const j = jobs.find((x) => x.id === id);
-  return j ? { image: j.image || j.original, original: j.original, item: j.item } : {};
+  return j ? { image: j.image || j.original, original: j.original, item: j.item, gallery: j.gallery || [] } : {};
 }

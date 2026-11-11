@@ -3,20 +3,22 @@ import { CATEGORY_LABEL } from '../lib/rules.js';
 import { getProfile } from '../lib/db.js';
 import { api } from '../lib/api.js';
 import { forAI, prepareItemImage } from '../lib/image.js';
-import { makeProductPhoto } from '../lib/productPhoto.js';
+import { makeProductPhoto, makeProductSet, PHOTO_VERSION } from '../lib/productPhoto.js';
+import { resize } from '../lib/image.js';
 import { BlobImg, ErrorBox, FilePick, Spinner } from './ui.jsx';
 
 const SEASON_LABEL = { spring: '春', summer: '夏', autumn: '秋', winter: '冬' };
 const FORMALITY = ['', '部屋着', 'ラフ', 'カジュアル', 'きれいめ', 'フォーマル'];
 const WARMTH = ['', '真夏', '夏', '春秋', '秋冬', '真冬'];
-const FIELDS = ['name', 'brand', 'category', 'subcategory', 'colors', 'material', 'pattern', 'formality', 'warmth', 'seasons', 'notes'];
+const FIELDS = ['name', 'brand', 'brandConfidence', 'category', 'subcategory', 'colors', 'material', 'pattern', 'formality', 'warmth', 'seasons', 'notes', 'details', 'shownSide', 'backDetail'];
 
 // アイテムの編集フォーム。写真の差し替え・AI再解析・商品写真化もここでできる
 export default function ItemEditor({ initial, image, onSave, onCancel, saveLabel = '保存', extra }) {
   const [f, setF] = useState(() => ({
     name: '', brand: '', category: 'tops', subcategory: '', colors: [], material: '', pattern: '',
-    formality: 3, warmth: 3, seasons: [], notes: '', isFixed: false, ...initial,
+    formality: 3, warmth: 3, seasons: [], notes: '', isFixed: false, details: [], ...initial,
   }));
+  const [gallery, setGallery] = useState(() => initial?.gallery || []);
   const [img, setImg] = useState(image || null);
   const [prevImg, setPrevImg] = useState(null);
   const [aiPhoto, setAiPhoto] = useState(false);
@@ -43,7 +45,8 @@ export default function ItemEditor({ initial, image, onSave, onCancel, saveLabel
       let image = r.image;
       if (p.photoMode === 'ai') {
         try {
-          image = await makeProductPhoto(r.original, { name: f.name, category: f.category, brand: f.brand, onStage: setBusy });
+          image = await makeProductPhoto(r.original, { ...f, onStage: setBusy });
+          setAiPhoto(true);
         } catch (e) {
           setError(new Error(`商品写真化に失敗したので元の写真にしました（${e.message}）`));
         }
@@ -66,11 +69,29 @@ export default function ItemEditor({ initial, image, onSave, onCancel, saveLabel
   const productize = () =>
     task('AIが商品写真を撮影中…（10〜30秒）', async () => {
       const src = original || initial?.original || img;
-      const out = await makeProductPhoto(src, { name: f.name, category: f.category, brand: f.brand, onStage: setBusy });
+      const set = await makeProductSet(src, f, { onStage: setBusy });
       setPrevImg(img);
-      setImg(out);
+      setImg(set.image);
+      // 自分で追加した写真は残し、AIが作った背面は入れ替える
+      setGallery((g) => [...set.gallery, ...g.filter((x) => x.original)]);
       setAiPhoto(true);
       if (!original && initial?.original == null) setOriginal(src);
+    });
+
+  // 背面などの写真を追加（AIモードなら公式ブティック風に撮り直す）
+  const addShot = (files) =>
+    task('写真を処理中…', async () => {
+      const p = await getProfile();
+      const src = await resize(files[0], 1600, { type: 'image/jpeg', quality: 0.88 });
+      let image = await resize(src, 1400, { type: 'image/jpeg', quality: 0.9 });
+      if (p.photoMode === 'ai') {
+        try {
+          image = await makeProductPhoto(src, { ...f, view: 'back', onStage: setBusy });
+        } catch (e) {
+          setError(new Error(`商品写真化に失敗したので元の写真にしました（${e.message}）`));
+        }
+      }
+      setGallery((g) => [...g, { label: '背面', image, original: src }]);
     });
 
   return (
@@ -80,7 +101,7 @@ export default function ItemEditor({ initial, image, onSave, onCancel, saveLabel
         e.preventDefault();
         if (!f.name.trim()) return alert('名前を入力してください');
         if (busy) return;
-        onSave({ ...f, formality: Number(f.formality), warmth: Number(f.warmth), image: img, ...(original ? { original } : {}), ...(aiPhoto ? { photoVersion: 2 } : {}) });
+        onSave({ ...f, formality: Number(f.formality), warmth: Number(f.warmth), image: img, gallery, ...(original ? { original } : {}), ...(aiPhoto ? { photoVersion: PHOTO_VERSION } : {}) });
       }}
     >
       {img && (
@@ -88,10 +109,22 @@ export default function ItemEditor({ initial, image, onSave, onCancel, saveLabel
           <BlobImg blob={img} alt={f.name} />
         </div>
       )}
+      {gallery.length > 0 && (
+        <div className="editor-gallery">
+          {gallery.map((g, i) => (
+            <div key={i} className="editor-shot">
+              <BlobImg blob={g.image} alt={g.label} />
+              <span className="small">{g.label}</span>
+              <button type="button" className="btn btn-small btn-ghost" onClick={() => setGallery((x) => x.filter((_, j) => j !== i))}>削除</button>
+            </div>
+          ))}
+        </div>
+      )}
       <div className="row wrap editor-tools">
         <FilePick label={img ? '写真を差し替え' : '写真を追加'} onFiles={replace} className="btn btn-small" />
         {img && <button type="button" className="btn btn-small" onClick={reanalyze} disabled={!!busy}>AIで再解析</button>}
         {img && <button type="button" className="btn btn-small" onClick={productize} disabled={!!busy}>✨ AIで撮り直す</button>}
+        {img && <FilePick label="＋ 背面の写真" onFiles={addShot} className="btn btn-small" />}
         {prevImg && <button type="button" className="btn btn-small btn-ghost" onClick={() => { setImg(prevImg); setPrevImg(null); setOriginal(null); }}>写真を元に戻す</button>}
       </div>
       {busy && <Spinner label={busy} />}
@@ -103,7 +136,20 @@ export default function ItemEditor({ initial, image, onSave, onCancel, saveLabel
       </label>
       <label className="field">
         <span>ブランド</span>
-        <input value={f.brand || ''} onChange={(e) => set('brand', e.target.value)} placeholder="例: Ralph Lauren（分からなければ空欄）" list="brand-list" />
+        <div className="row">
+          <input
+            style={{ flex: 1 }}
+            value={f.brand || ''}
+            onChange={(e) => setF((p) => ({ ...p, brand: e.target.value, brandConfidence: e.target.value.trim() ? 'sure' : 'unknown' }))}
+            placeholder="不明（分からなければ空欄）"
+            list="brand-list"
+          />
+          {f.brand && f.brandConfidence === 'guess' && (
+            <button type="button" className="chip" title="タップで確定" onClick={() => set('brandConfidence', 'sure')}>
+              AI推測 → 確定にする
+            </button>
+          )}
+        </div>
       </label>
       <div className="field-row">
         <label className="field">
@@ -160,6 +206,20 @@ export default function ItemEditor({ initial, image, onSave, onCancel, saveLabel
           ))}
         </div>
       </div>
+      <label className="field">
+        <span>目印のディテール（ロゴ・刺繍・プリントなど。1行に1つ。AI撮り直しで必ず再現します）</span>
+        <textarea
+          rows="3"
+          defaultValue={(f.details || []).join('\n')}
+          key={(f.details || []).join('|')}
+          onBlur={(e) => set('details', e.target.value.split('\n').map((s) => s.trim()).filter(Boolean))}
+          placeholder="例: 左胸に小さな紺の馬の刺繍ロゴ"
+        />
+      </label>
+      <label className="field">
+        <span>背面の特徴（あれば）</span>
+        <input value={f.backDetail || ''} onChange={(e) => set('backDetail', e.target.value)} placeholder="例: 背中上部に白い筆記体のプリント文字" />
+      </label>
       <label className="field">
         <span>メモ</span>
         <input value={f.notes} onChange={(e) => set('notes', e.target.value)} />
