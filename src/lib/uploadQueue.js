@@ -14,7 +14,7 @@ function emit() {
   const snap = jobs.map((j) => ({ ...j }));
   listeners.forEach((l) => l(snap));
 }
-const PERSIST_KEYS = ['file', 'extras', 'groupBatch', 'redoId', 'original', 'image', 'gallery', 'item', 'forceMode', 'skipCut', 'createdAt'];
+const PERSIST_KEYS = ['file', 'extras', 'groupBatch', 'needsConfirm', 'groupName', 'redoId', 'original', 'image', 'gallery', 'item', 'forceMode', 'skipCut', 'createdAt'];
 const GROUP_CHUNK = 30;
 function persist(job) {
   const row = { id: job.id };
@@ -41,7 +41,9 @@ export async function restoreQueue() {
     for (const r of rows) {
       if (jobs.some((j) => j.id === r.id)) continue;
       if (r.groupBatch) batches.add(r.groupBatch);
-      jobs.push({ ...r, status: r.groupBatch ? 'grouping' : 'waiting', label: r.groupBatch ? '同じ服の写真をまとめ中…' : '再開待ち', error: null, itemId: null });
+      const status = r.groupBatch ? 'grouping' : r.needsConfirm ? 'confirm' : 'waiting';
+      const label = { grouping: '同じ服の写真をまとめ中…', confirm: '同じ服か確認してください', waiting: '再開待ち' }[status];
+      jobs.push({ ...r, status, label, error: null, itemId: null });
     }
     if (rows.length) {
       emit();
@@ -90,10 +92,12 @@ async function groupBatch(batch) {
           .filter((p) => p !== main)
           .map((p) => ({ file: chunk[p.index].file, role: p.role, label: p.label, note: p.note }));
         const head = chunk[main.index];
-        // メインのジョブに追加写真として持たせてから（保存も）、まとめた写真のジョブを消す
+        // メインのジョブに追加写真として持たせてから（保存も）、まとめた写真のジョブを消す。
+        // 複数枚をまとめた場合は、本当に同じ服かユーザーに確認してから処理する
         patch(head.id, {
-          status: 'waiting', groupBatch: undefined, extras,
-          label: extras.length ? `待機中（${extras.length + 1}枚を1点にまとめました）` : '待機中',
+          status: extras.length ? 'confirm' : 'waiting', groupBatch: undefined, extras,
+          needsConfirm: extras.length ? true : undefined, groupName: g.item || undefined,
+          label: extras.length ? '同じ服か確認してください' : '待機中',
         });
         for (const p of g.photos) if (p !== main) {
           jobs = jobs.filter((j) => j.id !== chunk[p.index].id);
@@ -108,6 +112,33 @@ async function groupBatch(batch) {
   }
   emit();
   pump();
+}
+
+// 「同じ服ですか？」への回答
+// keep: まとめたままにする追加写真の番号（extras の index）。それ以外は別のアイテムとして登録する
+export function confirmGroup(id, keep) {
+  const job = jobs.find((j) => j.id === id);
+  if (!job || job.status !== 'confirm') return;
+  const extras = job.extras || [];
+  const keepSet = new Set(keep ?? extras.map((_, i) => i));
+  const split = extras.filter((_, i) => !keepSet.has(i));
+  const now = Date.now();
+  // 外した写真は1枚ずつの新しいジョブに（先に保存してから元のジョブを更新）
+  for (const [i, x] of split.entries()) {
+    const nj = { id: newId(), file: x.file || x.image, createdAt: now + i, status: 'waiting', label: '待機中', error: null, itemId: null };
+    jobs.push(nj);
+    persist(nj);
+  }
+  const kept = extras.filter((_, i) => keepSet.has(i));
+  patch(id, {
+    status: 'waiting', needsConfirm: undefined, extras: kept,
+    label: kept.length ? `待機中（${kept.length + 1}枚を1点として登録）` : '待機中',
+  });
+  pump();
+}
+
+export function confirmAll() {
+  jobs.filter((j) => j.status === 'confirm').forEach((j) => confirmGroup(j.id));
 }
 
 // 登録済みアイテムの写真をAIで撮り直す

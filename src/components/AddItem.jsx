@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { db, newId } from '../lib/db.js';
-import { subscribe, enqueue, retry, dismiss, clearFinished, jobImages } from '../lib/uploadQueue.js';
+import { subscribe, enqueue, retry, dismiss, clearFinished, jobImages, confirmGroup, confirmAll } from '../lib/uploadQueue.js';
+import { ROLE_LABEL } from '../lib/productPhoto.js';
 import ItemEditor from './ItemEditor.jsx';
 import { BlobImg, FilePick, Modal, Spinner, usePaste, useBlobUrl } from './ui.jsx';
 
@@ -15,6 +16,46 @@ function JobThumb({ job, item }) {
   return (
     <div className="job-img">
       {item ? <BlobImg blob={item.image} /> : job.image ? <BlobImg blob={job.image} /> : fileUrl ? <img src={fileUrl} alt="" /> : null}
+    </div>
+  );
+}
+
+function Photo({ blob, children, off, onClick }) {
+  const url = useBlobUrl(blob);
+  return (
+    <button type="button" className={`confirm-photo ${off ? 'is-off' : ''}`} onClick={onClick} disabled={!onClick}>
+      {url && <img src={url} alt="" />}
+      {children}
+    </button>
+  );
+}
+
+// 「この写真は同じ服ですか？」の確認カード
+function ConfirmGroup({ job }) {
+  const extras = job.extras || [];
+  const [keep, setKeep] = useState(() => extras.map(() => true));
+  const kept = keep.filter(Boolean).length;
+  return (
+    <div className="confirm-card">
+      <p className="confirm-q">
+        この{extras.length + 1}枚は同じ服ですか？
+        {job.groupName && <span className="muted small">（AIの判断: {job.groupName}）</span>}
+      </p>
+      <p className="muted small">違う写真はタップして外してください。外した写真は別のアイテムとして登録します。</p>
+      <div className="confirm-photos">
+        <Photo blob={job.file}><span className="confirm-role">メイン</span></Photo>
+        {extras.map((x, i) => (
+          <Photo key={i} blob={x.file || x.image} off={!keep[i]} onClick={() => setKeep((k) => k.map((v, j) => (j === i ? !v : v)))}>
+            <span className="confirm-role">{keep[i] ? x.label || ROLE_LABEL[x.role] : '別の服'}</span>
+          </Photo>
+        ))}
+      </div>
+      <div className="row wrap">
+        <button className="btn btn-small btn-primary" onClick={() => confirmGroup(job.id, keep.flatMap((v, i) => (v ? [i] : [])))}>
+          {kept === extras.length ? 'はい、同じ服' : kept === 0 ? '全部別々に登録' : `${kept + 1}枚を同じ服として登録`}
+        </button>
+        {kept > 0 && <button className="btn btn-small btn-ghost" onClick={() => confirmGroup(job.id, [])}>全部別々の服</button>}
+      </div>
     </div>
   );
 }
@@ -36,6 +77,7 @@ export default function AddItem({ initialFiles = [], onClose }) {
 
   usePaste((f) => enqueue([f]));
 
+  const confirming = jobs.filter((j) => j.status === 'confirm');
   const done = jobs.filter((j) => j.status === 'done').length;
   const working = jobs.filter((j) => ['working', 'waiting', 'grouping'].includes(j.status)).length;
   const failed = jobs.filter((j) => j.status === 'error').length;
@@ -50,6 +92,13 @@ export default function AddItem({ initialFiles = [], onClose }) {
         <FilePick label="🖼 写真から選ぶ（複数OK）" multiple onFiles={enqueue} className="btn" />
       </div>
 
+      {confirming.length > 0 && (
+        <div className="confirm-list">
+          {confirming.map((j) => <ConfirmGroup key={j.id} job={j} />)}
+          {confirming.length > 1 && <button className="btn btn-small" onClick={confirmAll}>すべてAIの判断どおりにまとめる</button>}
+        </div>
+      )}
+
       {jobs.length > 0 && (
         <>
           <div className="job-summary">
@@ -62,7 +111,7 @@ export default function AddItem({ initialFiles = [], onClose }) {
             {done > 0 && working === 0 && <button className="btn btn-small btn-ghost" onClick={clearFinished}>完了分を消す</button>}
           </div>
           <div className="job-grid">
-            {jobs.map((j) => {
+            {jobs.filter((j) => j.status !== 'confirm').map((j) => {
               const item = j.itemId ? items[j.itemId] : null;
               return (
                 <div key={j.id} className={`job job-${j.status}`}>

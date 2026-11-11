@@ -35,6 +35,7 @@ export default function Closet({ addFiles, onAddHandled }) {
   const jobs = useUploadJobs();
   const pending = jobs.filter((j) => ['working', 'waiting', 'grouping'].includes(j.status)).length;
   const jobErrors = jobs.filter((j) => j.status === 'error').length;
+  const confirming = jobs.filter((j) => j.status === 'confirm').length;
   const unchecked = items.filter((i) => i.unchecked).length;
   const oldPhotos = items.filter((i) => (i.photoVersion || 0) < PHOTO_VERSION);
 
@@ -71,10 +72,10 @@ export default function Closet({ addFiles, onAddHandled }) {
         </div>
       </div>
 
-      {(pending > 0 || jobErrors > 0) && (
+      {(pending > 0 || jobErrors > 0 || confirming > 0) && (
         <button className="upload-banner" onClick={() => setAdding(true)}>
           {pending > 0 && <span className="spinner" />}
-          <span>{pending > 0 ? `${pending}点を処理中…` : ''}{jobErrors > 0 ? ` 失敗${jobErrors}点（タップで確認）` : ''}</span>
+          <span>{confirming > 0 ? `同じ服か確認待ち ${confirming}件（タップ）` : ''}{pending > 0 ? ` ${pending}点を処理中…` : ''}{jobErrors > 0 ? ` 失敗${jobErrors}点（タップで確認）` : ''}</span>
         </button>
       )}
 
