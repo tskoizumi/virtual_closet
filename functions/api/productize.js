@@ -1,4 +1,5 @@
 import { handler, generateImage, imagePart } from '../../lib/gemini.js';
+import { accessoryKind } from '../../lib/accessories.js';
 
 // ブランド公式オンラインブティックの商品ページ風の写真を作る。
 // ウェア類はモデルに着せて服に寄ったクロップ、靴・バッグ・小物はスタジオのスチール撮影。
@@ -11,7 +12,7 @@ function modelLine(gender) {
   return 'アイテムのデザイン・サイズ感に合う性別のモデル';
 }
 
-function shot(category, view, gender) {
+function shot(category, view, gender, item) {
   const back = view === 'back';
   const model = modelLine(gender);
   if (category === 'tops' || category === 'outer') {
@@ -30,17 +31,20 @@ function shot(category, view, gender) {
   if (category === 'bag') {
     return back ? '背面側を正面から写したスチール撮影。形をきれいに張らせて自立' : '正面から少しだけ斜めに、形をきれいに張らせて自立させたスチール撮影。持ち手は自然に立て、人は写さない';
   }
-  if (category === 'accessory') {
-    return '小物のスチール撮影。画面に大きく、質感と細部がはっきり分かるマクロ寄りの構図。人は写さない';
+  if (category === 'accessory' || (category === 'other' && accessoryKind(item).key !== 'other')) {
+    const kind = accessoryKind(item);
+    if (view === 'worn' && kind.worn) return `着用カット: ${model}の${kind.worn}。アイテムが画面の主役になるよう大きく写す`;
+    return `${kind.still}。人は写さない。小さなアイテムでも画面の6〜7割を占めるくらい大きく写す`;
   }
   return back ? '背面からの商品撮影' : '正面からの商品撮影。身につけるものならモデルに着用させ、顔は写さず服に寄ったクロップ';
 }
 
 // 写真（ハンガー・床置き・シワ・着用写真など何でもOK）→ 公式ブティックの商品写真
 export const onRequestPost = handler(async (body, env) => {
-  const { image, name = '', category = 'other', brand = '', details = [], backDetail = '', view = 'front', gender = 'auto' } = body;
+  const { image, name = '', subcategory = '', category = 'other', brand = '', details = [], backDetail = '', view = 'front', gender = 'auto' } = body;
   const back = view === 'back';
-  const worn = WORN.includes(category);
+  const worn = WORN.includes(category) || view === 'worn';
+  const small = category === 'accessory';
   const detailLines = (Array.isArray(details) ? details : []).filter(Boolean).slice(0, 12);
   if (back && backDetail) detailLines.unshift(`背面: ${backDetail}`);
 
@@ -49,13 +53,13 @@ export const onRequestPost = handler(async (body, env) => {
     parts: [
       imagePart(image),
       {
-        text: `この写真の${brand ? `${brand}の` : ''}「${name || 'アイテム'}」を、${brand || 'ハイブランド'}の公式オンラインブティックの商品ページに載っている${back ? '2枚目（背面）の' : 'メインの'}商品写真として1枚生成して。
+        text: `この写真の${brand ? `${brand}の` : ''}「${name || 'アイテム'}」を、${brand || 'ハイブランド'}の公式オンラインブティックの商品ページに載っている${back ? '2枚目（背面）の' : view === 'worn' ? '2枚目（着用イメージ）の' : 'メインの'}商品写真として1枚生成して。
 
 ## 元の写真について
 元の写真はハンガー掛け・床置き・畳んだ状態・シワだらけ・着用中のスナップなど、条件の悪い写真の可能性がある。床置きでつぶれた形やヨレ・シワ・不自然な角度をそのまま写さず、このアイテム本来の形・丈・身幅・シルエットに正しく復元すること。
 
 ## 撮影
-- 構図: ${shot(category, view, gender)}
+- 構図: ${shot(category, view, gender, { name, subcategory })}
 - 背景: ${BACKDROP}
 - ライティング: ハイブランドのEC撮影の、柔らかく均一なスタジオ光。${worn ? '足元にごく淡い自然な影のみ' : '被写体の下にごく淡い自然な接地影のみ'}
 - 質感: 織り・編み・起毛・革の艶・金具の光沢が分かる高精細な描写。色は元の写真に正確に合わせる（照明による色かぶりは補正）
@@ -64,7 +68,7 @@ ${worn ? '- モデル: 洗練された自然体のポーズ。服のシルエッ
 ## 元の写真と同じにする（最重要）
 - 色・柄・素材・形・丈・襟・袖・ボタン・ポケット・ステッチ・金具などデザインはすべて元の写真どおり。シワや型崩れ以外は変えない。装飾を足さない
 - ロゴ・ワンポイント刺繍・ワッペン・プリント文字は、小さくても必ず同じ位置・大きさ・色・形で描く。消したり、ぼかしたり、別の形にしたりしない。文字は元の綴りのまま、読めない文字を作らない
-${detailLines.length ? `- 特に以下のディテールは必ず写っていること:\n${detailLines.map((d) => `  - ${d}`).join('\n')}\n` : ''}${back ? '- 背面は元の写真に写っている背面のデザインを忠実に再現する。写っていない部分を創作しない\n' : '- 見えない部分は、見えている部分から自然に補完する\n'}- 写さない: ハンガー、値札、タグ、床、家具、元の写真の背景、他の服や物${worn ? '' : '、人の体や手'}
+${detailLines.length ? `- 特に以下のディテールは必ず写っていること:\n${detailLines.map((d) => `  - ${d}`).join('\n')}\n` : ''}${small ? '- 小物は元の写真で小さく写っていたり解像度が低かったりする可能性がある。見えている形・色・素材・石や金具の数と配置に忠実に高精細化し、読み取れない刻印や細かい文字を創作しない。サイズ感（実物の大きさ）も元の写真から変えない\n' : ''}${back ? '- 背面は元の写真に写っている背面のデザインを忠実に再現する。写っていない部分を創作しない\n' : '- 見えない部分は、見えている部分から自然に補完する\n'}- 写さない: ハンガー、値札、タグ、床、家具、元の写真の背景、他の服や物${worn ? '' : '、人の体や手'}
 - 画像の上に重ねる文字・透かし・キャプションは入れない（服や小物に元々ある文字・ロゴはそのまま残す）`,
       },
     ],

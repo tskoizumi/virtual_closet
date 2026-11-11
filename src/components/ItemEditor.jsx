@@ -79,19 +79,19 @@ export default function ItemEditor({ initial, image, onSave, onCancel, saveLabel
     });
 
   // 背面などの写真を追加（AIモードなら公式ブティック風に撮り直す）
-  const addShot = (files) =>
+  const addShot = (files, view = 'back', label = '背面') =>
     task('写真を処理中…', async () => {
       const p = await getProfile();
       const src = await resize(files[0], 1600, { type: 'image/jpeg', quality: 0.88 });
       let image = await resize(src, 1400, { type: 'image/jpeg', quality: 0.9 });
       if (p.photoMode === 'ai') {
         try {
-          image = await makeProductPhoto(src, { ...f, view: 'back', onStage: setBusy });
+          image = await makeProductPhoto(src, { ...f, view, onStage: setBusy });
         } catch (e) {
           setError(new Error(`商品写真化に失敗したので元の写真にしました（${e.message}）`));
         }
       }
-      setGallery((g) => [...g, { label: '背面', image, original: src }]);
+      setGallery((g) => [...g, { label, image, original: src }]);
     });
 
   return (
@@ -124,7 +124,9 @@ export default function ItemEditor({ initial, image, onSave, onCancel, saveLabel
         <FilePick label={img ? '写真を差し替え' : '写真を追加'} onFiles={replace} className="btn btn-small" />
         {img && <button type="button" className="btn btn-small" onClick={reanalyze} disabled={!!busy}>AIで再解析</button>}
         {img && <button type="button" className="btn btn-small" onClick={productize} disabled={!!busy}>✨ AIで撮り直す</button>}
-        {img && <FilePick label="＋ 背面の写真" onFiles={addShot} className="btn btn-small" />}
+        {img && (f.category === 'accessory'
+          ? <FilePick label="＋ 着用写真" onFiles={(x) => addShot(x, 'worn', '着用')} className="btn btn-small" />
+          : <FilePick label="＋ 背面の写真" onFiles={(x) => addShot(x)} className="btn btn-small" />)}
         {prevImg && <button type="button" className="btn btn-small btn-ghost" onClick={() => { setImg(prevImg); setPrevImg(null); setOriginal(null); }}>写真を元に戻す</button>}
       </div>
       {busy && <Spinner label={busy} />}
