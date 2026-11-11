@@ -4,6 +4,7 @@ import { db, getProfile, setKV, getKV } from '../lib/db.js';
 import { api, getPasscode, setPasscode } from '../lib/api.js';
 import { resize, blobToDataURL, dataURLToBlob } from '../lib/image.js';
 import { PERSONAS } from '../lib/personas.js';
+import SyncPanel from './SyncPanel.jsx';
 import { BlobImg, ErrorBox, FilePick, Spinner } from './ui.jsx';
 
 export default function Settings() {
@@ -34,11 +35,13 @@ export default function Settings() {
     try {
       const items = [];
       for (const it of await db.items.toArray()) {
-        items.push({ ...it, image: await blobToDataURL(it.image), original: it.original ? await blobToDataURL(it.original) : null });
+        const { _dirty, ...row } = it;
+        items.push({ ...row, image: await blobToDataURL(it.image), original: it.original ? await blobToDataURL(it.original) : null });
       }
       const outfits = [];
       for (const o of await db.outfits.toArray()) {
-        outfits.push({ ...o, tryon: o.tryon ? await blobToDataURL(o.tryon) : null });
+        const { _dirty, ...row } = o;
+        outfits.push({ ...row, tryon: o.tryon ? await blobToDataURL(o.tryon) : null });
       }
       const personPhoto = person ? await blobToDataURL(person) : null;
       const blob = new Blob([JSON.stringify({ app: 'virtual_closet', version: 1, items, outfits, profile: p, personPhoto })], { type: 'application/json' });
@@ -79,7 +82,7 @@ export default function Settings() {
       <div className="page-head">
         <div>
           <h2 className="title">Settings</h2>
-          <p className="muted">データはこの端末のブラウザ内にだけ保存されます</p>
+          <p className="muted">データは端末のブラウザ内に保存されます（クラウド同期をONにすると他の端末とも共有）</p>
         </div>
       </div>
 
@@ -145,10 +148,13 @@ export default function Settings() {
           <p className="muted small">
             {health.hasKey ? '✓ Gemini APIキー設定済み' : '✕ GEMINI_API_KEY が未設定'} ・ モデル: {health.textModels.join(' → ')} / 画像: {health.imageModels.join(' → ')}
             {health.passcodeRequired && ' ・ 合言葉が必要'}
+            {health.hasDB ? ' ・ ✓ 同期用DB接続済み' : ' ・ 同期用DB(D1)は未設定'}
           </p>
         )}
         <ErrorBox error={hErr} />
       </div>
+
+      <SyncPanel />
 
       <div className="panel">
         <h4>データ</h4>
@@ -163,9 +169,10 @@ export default function Settings() {
             <button
               className="btn btn-danger"
               onClick={async () => {
-                if (confirm('すべてのアイテムと履歴を削除します。元に戻せません。よろしいですか？')) {
-                  await db.items.clear();
-                  await db.outfits.clear();
+                if (confirm('すべてのアイテムと履歴を削除します（クラウド同期中なら他の端末からも消えます）。元に戻せません。よろしいですか？')) {
+                  // clear() は削除の記録が残らず同期されないため、キーを指定して消す
+                  await db.items.bulkDelete(await db.items.toCollection().primaryKeys());
+                  await db.outfits.bulkDelete(await db.outfits.toCollection().primaryKeys());
                 }
               }}
             >

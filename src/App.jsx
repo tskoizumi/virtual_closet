@@ -6,6 +6,7 @@ import Review from './components/Review.jsx';
 import Settings from './components/Settings.jsx';
 import { api } from './lib/api.js';
 import { restoreQueue } from './lib/uploadQueue.js';
+import { startSync } from './lib/sync.js';
 
 const TABS = [
   { key: 'today', label: '今日', icon: '☀' },
@@ -40,6 +41,7 @@ export default function App() {
       .catch(() => setBanner('サーバーに接続できません。AI機能は使えません。'));
     if (navigator.storage?.persist) navigator.storage.persist();
     restoreQueue();
+    startSync();
   }, []);
 
   return (

@@ -1,6 +1,7 @@
 import Dexie from 'dexie';
 
-// すべてのデータはこの端末のブラウザ内(IndexedDB)にだけ保存される
+// データはまず端末のブラウザ内(IndexedDB)に保存される。
+// クラウド同期をONにすると、変更が sync.js 経由でサーバーのD1にも反映される。
 export const db = new Dexie('virtual_closet');
 db.version(1).stores({
   items: 'id, category, createdAt, lastWornAt, wearCount',
@@ -11,6 +12,57 @@ db.version(1).stores({
 db.version(2).stores({
   jobs: 'id, createdAt',
 });
+// クラウド同期用: 削除の記録（サーバーに送ったら消す）
+db.version(3).stores({
+  tombstones: 'key',
+});
+
+// ---- 同期のための変更追跡 ----
+// 端末での作成・更新には updatedAt と _dirty=1（未送信）を付け、削除は tombstones に記録する。
+// サーバーから取り込む書き込みは markSyncTx() したトランザクション内で行い、追跡しない。
+export const SYNC_TABLES = ['items', 'outfits', 'kv'];
+export const SYNC_KV_KEYS = ['profile', 'personPhoto'];
+export const changes = new EventTarget();
+
+export function markSyncTx() {
+  if (Dexie.currentTransaction) Dexie.currentTransaction.__sync = true;
+}
+function isSyncTx(tx) {
+  for (let t = tx; t; t = t.parent) if (t.__sync) return true;
+  return false;
+}
+function tracked(table, key) {
+  return table !== 'kv' || SYNC_KV_KEYS.includes(key);
+}
+function notify(tx) {
+  if (tx.__notify) return;
+  tx.__notify = true;
+  tx.on('complete', () => changes.dispatchEvent(new Event('change')));
+}
+for (const name of SYNC_TABLES) {
+  const table = db.table(name);
+  table.hook('creating', function (pk, obj, tx) {
+    if (isSyncTx(tx) || !tracked(name, pk ?? obj.id ?? obj.key)) return;
+    obj.updatedAt = Date.now();
+    obj._dirty = 1;
+    notify(tx);
+  });
+  table.hook('updating', function (mods, pk, obj, tx) {
+    if (isSyncTx(tx) || !tracked(name, pk)) return;
+    notify(tx);
+    return { updatedAt: Date.now(), _dirty: 1 };
+  });
+  table.hook('deleting', function (pk, obj, tx) {
+    if (isSyncTx(tx) || !tracked(name, pk)) return;
+    const at = Date.now();
+    tx.on('complete', () => {
+      db.tombstones
+        .put({ key: `${name}:${pk}`, collection: name, id: pk, updatedAt: at })
+        .then(() => changes.dispatchEvent(new Event('change')))
+        .catch(() => {});
+    });
+  });
+}
 
 export function newId() {
   return Math.random().toString(36).slice(2, 8) + Date.now().toString(36).slice(-2);
