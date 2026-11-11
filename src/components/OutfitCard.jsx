@@ -3,6 +3,7 @@ import { db, getKV, markWorn } from '../lib/db.js';
 import { api } from '../lib/api.js';
 import { forAI, base64ToBlob } from '../lib/image.js';
 import { BlobImg, ErrorBox, Modal, Spinner, Thumb } from './ui.jsx';
+import { IconCheck } from './icons.jsx';
 
 export default function OutfitCard({ outfit, byId, index }) {
   const [askWhy, setAskWhy] = useState(false);
@@ -19,7 +20,7 @@ export default function OutfitCard({ outfit, byId, index }) {
   return (
     <article className="outfit">
       <header className="outfit-head">
-        <span className="outfit-no">{String(index + 1).padStart(2, '0')}</span>
+        <span className="outfit-no">LOOK {String(index + 1).padStart(2, '0')}</span>
         <h3>{outfit.title}</h3>
       </header>
       <div className="outfit-items">
@@ -31,16 +32,16 @@ export default function OutfitCard({ outfit, byId, index }) {
         ))}
       </div>
       <p className="outfit-reason">{outfit.reason}</p>
-      {outfit.styling_tip && <p className="outfit-tip">✦ {outfit.styling_tip}</p>}
+      {outfit.styling_tip && <p className="outfit-tip">{outfit.styling_tip}</p>}
       {outfit.tryon && (
         <button className="tryon-preview" onClick={() => setTryOpen(true)}>
           <BlobImg blob={outfit.tryon} alt="着用イメージ" />
         </button>
       )}
       <div className="outfit-actions">
-        <button className={`btn btn-small ${outfit.rating === 'up' ? 'is-on' : ''}`} onClick={() => rate('up')}>👍</button>
-        <button className={`btn btn-small ${outfit.rating === 'down' ? 'is-on' : ''}`} onClick={() => rate('down')}>👎</button>
-        <button className="btn btn-small" onClick={() => setTryOpen(true)}>👤 試着</button>
+        <button className={`btn btn-small ${outfit.rating === 'up' ? 'is-on' : ''}`} onClick={() => rate('up')}>好き</button>
+        <button className={`btn btn-small ${outfit.rating === 'down' ? 'is-on' : ''}`} onClick={() => rate('down')}>微妙</button>
+        <button className="btn btn-small" onClick={() => setTryOpen(true)}>試着</button>
         <button
           className={`btn btn-small ${outfit.worn ? 'is-on' : 'btn-primary'}`}
           disabled={outfit.worn}
@@ -49,7 +50,7 @@ export default function OutfitCard({ outfit, byId, index }) {
             await db.outfits.update(outfit.id, { worn: true, wornAt: Date.now() });
           }}
         >
-          {outfit.worn ? '✓ 着た' : 'これ着る'}
+          {outfit.worn ? <><IconCheck /> 着た</> : 'これ着る'}
         </button>
       </div>
       {askWhy && (

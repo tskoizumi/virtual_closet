@@ -53,7 +53,7 @@ export default function Shop({ onBought }) {
     <section>
       <div className="page-head">
         <div>
-          <h2 className="title">Shopping</h2>
+          <h2 className="title">買い物の相談</h2>
           <p className="muted">買う前に、手持ちとの相性をチェック</p>
         </div>
       </div>
@@ -61,8 +61,8 @@ export default function Shop({ onBought }) {
       <div className="panel">
         <p className="muted small">ECサイトの商品ページのスクショか、店頭で撮った写真を選んでください（PCなら貼り付けもOK）。</p>
         <div className="row">
-          <FilePick label="🖼 スクショを選ぶ" onFiles={(f) => pick(f[0])} className="btn" />
-          <FilePick label="📷 店頭で撮る" capture="environment" onFiles={(f) => pick(f[0])} className="btn" />
+          <FilePick label="スクショを選ぶ" onFiles={(f) => pick(f[0])} className="btn" />
+          <FilePick label="店頭で撮る" capture="environment" onFiles={(f) => pick(f[0])} className="btn" />
         </div>
         {url && <img src={url} alt="候補の商品" className="shop-img" />}
         {file && !busy && (

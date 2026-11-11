@@ -60,15 +60,15 @@ export default function Closet({ addFiles, onAddHandled }) {
     <section>
       <div className="page-head">
         <div>
-          <h2 className="title">Closet</h2>
+          <h2 className="title">クローゼット</h2>
           <p className="muted">
             {items.length}点
             {items.length > 0 && ` ・ 30日以上着てない服 ${sleeping}点`}
           </p>
         </div>
         <div className="row wrap head-actions">
-          <button className="btn" onClick={() => setDetecting(true)}>📸 コーデ写真から</button>
-          <button className="btn btn-primary" onClick={() => setAdding(true)}>＋ 服を追加</button>
+          <button className="btn" onClick={() => setDetecting(true)}>コーデ写真から</button>
+          <button className="btn btn-primary" onClick={() => setAdding(true)}>服を追加</button>
         </div>
       </div>
 
@@ -88,7 +88,7 @@ export default function Closet({ addFiles, onAddHandled }) {
               if (confirm(`${oldPhotos.length}点の写真を、公式ブティック風の商品写真にAIで撮り直します（1点ごとに画像生成APIを使います）。よろしいですか？`)) enqueueRedo(oldPhotos);
             }}
           >
-            ✨ まとめて撮り直す
+            まとめて撮り直す
           </button>
         </div>
       )}
@@ -99,7 +99,7 @@ export default function Closet({ addFiles, onAddHandled }) {
           <p className="muted">まずはトップス・ボトムス・靴を数点ずつ登録すると、コーデ提案が使えるようになります。</p>
           <div className="row" style={{ justifyContent: 'center', flexWrap: 'wrap' }}>
             <button className="btn btn-primary" onClick={() => setAdding(true)}>最初の1着を登録する</button>
-            <button className="btn" onClick={() => setDetecting(true)}>📸 コーデ写真からまとめて登録</button>
+            <button className="btn" onClick={() => setDetecting(true)}>コーデ写真からまとめて登録</button>
           </div>
         </div>
       ) : (

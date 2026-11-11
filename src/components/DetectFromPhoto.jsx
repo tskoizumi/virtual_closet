@@ -115,8 +115,8 @@ export default function DetectFromPhoto({ onClose }) {
         全身のコーデ写真（鏡の前の自撮りなど）から、写っているアイテムをまとめて登録します。手持ちと同じアイテムは自動で見分けます。
       </p>
       <div className="row">
-        <FilePick label="📷 撮影" capture="environment" onFiles={(f) => detect(f[0])} className="btn btn-primary" />
-        <FilePick label="🖼 写真を選ぶ" onFiles={(f) => detect(f[0])} className="btn" />
+        <FilePick label="撮影する" capture="environment" onFiles={(f) => detect(f[0])} className="btn btn-primary" />
+        <FilePick label="写真を選ぶ" onFiles={(f) => detect(f[0])} className="btn" />
       </div>
 
       {photoUrl && <img src={photoUrl} alt="コーデ写真" className="shop-img" />}
@@ -145,7 +145,7 @@ export default function DetectFromPhoto({ onClose }) {
                 </button>
                 <div className="det-body">
                   <button type="button" className="det-name" onClick={() => setEditing(d)}>
-                    {d.fields.name} <span className="muted small">✎</span>
+                    {d.fields.name} <span className="muted small">編集</span>
                   </button>
                   <div className="muted small">
                     {d.fields.brand ? `${d.fields.brand}${d.fields.brandConfidence === 'guess' ? '(推測)' : ''} ・ ` : ''}{CATEGORY_LABEL[d.fields.category]} ・ {d.fields.colors?.join('/')} ・ {d.fields.material}

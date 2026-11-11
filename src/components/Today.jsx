@@ -129,7 +129,7 @@ export default function Today({ goCloset }) {
     <section>
       <div className="page-head">
         <div>
-          <h2 className="title">Today</h2>
+          <h2 className="title">今日のコーデ</h2>
           <p className="muted">{new Date().toLocaleDateString('ja-JP', { month: 'long', day: 'numeric', weekday: 'long' })}</p>
         </div>
       </div>
@@ -176,9 +176,9 @@ export default function Today({ goCloset }) {
             <span>今日着たいアイテム（任意）</span>
             <div className="row wrap">
               {must.map((id) => (
-                <Thumb key={id} item={byId[id]} size="xs" onClick={() => setMust(must.filter((m) => m !== id))} badge="✕" />
+                <Thumb key={id} item={byId[id]} size="xs" onClick={() => setMust(must.filter((m) => m !== id))} badge="×" />
               ))}
-              <button className="btn btn-small" onClick={() => setPicking(true)}>＋ 選ぶ</button>
+              <button className="btn btn-small" onClick={() => setPicking(true)}>選ぶ</button>
             </div>
           </div>
           {busy ? <Spinner label={busy} /> : (
@@ -205,7 +205,7 @@ export default function Today({ goCloset }) {
               <div className="row">
                 {o.itemIds.map((id) => <Thumb key={id} item={byId[id]} size="xs" />)}
               </div>
-              <span>{o.rating === 'up' ? '👍' : o.rating === 'down' ? '👎' : ''}{o.worn ? ' 着た' : ''}</span>
+              <span>{[o.rating === 'up' ? '好き' : o.rating === 'down' ? '微妙' : '', o.worn ? '着た' : ''].filter(Boolean).join('・')}</span>
             </div>
           ))}
         </details>

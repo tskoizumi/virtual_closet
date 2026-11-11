@@ -44,14 +44,14 @@ export default function Review() {
     <section>
       <div className="page-head">
         <div>
-          <h2 className="title">Advice</h2>
+          <h2 className="title">コーデ相談</h2>
           <p className="muted">今日のコーデを見せて相談</p>
         </div>
       </div>
       <div className="panel">
         <div className="row">
-          <FilePick label="📷 鏡の前で撮る" capture="user" onFiles={(f) => pick(f[0])} className="btn" />
-          <FilePick label="🖼 写真を選ぶ" onFiles={(f) => pick(f[0])} className="btn" />
+          <FilePick label="鏡の前で撮る" capture="user" onFiles={(f) => pick(f[0])} className="btn" />
+          <FilePick label="写真を選ぶ" onFiles={(f) => pick(f[0])} className="btn" />
         </div>
         {url && <img src={url} alt="コーデ写真" className="shop-img" />}
         <label className="field">
@@ -83,7 +83,7 @@ export default function Review() {
               ))}
             </>
           )}
-          {res.styling_tip && <p className="outfit-tip">✦ {res.styling_tip}</p>}
+          {res.styling_tip && <p className="outfit-tip">{res.styling_tip}</p>}
         </div>
       )}
     </section>

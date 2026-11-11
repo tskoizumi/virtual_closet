@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { IconClose } from './icons.jsx';
 
 export function useBlobUrl(blob) {
   const [url, setUrl] = useState(null);
@@ -41,7 +42,7 @@ export function Modal({ title, onClose, children, wide }) {
       <div className={`modal ${wide ? 'modal-wide' : ''}`} onClick={(e) => e.stopPropagation()}>
         <div className="modal-head">
           <h3>{title}</h3>
-          <button className="icon-btn" onClick={onClose} aria-label="閉じる">✕</button>
+          <button className="icon-btn" onClick={onClose} aria-label="閉じる"><IconClose /></button>
         </div>
         <div className="modal-body">{children}</div>
       </div>

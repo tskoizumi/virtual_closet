@@ -88,8 +88,8 @@ export default function AddItem({ initialFiles = [], onClose }) {
         写真をまとめて選ぶだけでOK。同じ服の別角度・裏地やボタンのアップ・タグ・着こなし見本の写真が混ざっていても、AIが1点にまとめます。解析と撮影は裏で進めて、終わったものから自動でクローゼットに登録します（この画面を閉じても続きます）。内容はあとからタップで編集できます。
       </p>
       <div className="row">
-        <FilePick label="📷 撮影" capture="environment" onFiles={enqueue} className="btn btn-primary" />
-        <FilePick label="🖼 写真から選ぶ（複数OK）" multiple onFiles={enqueue} className="btn" />
+        <FilePick label="撮影する" capture="environment" onFiles={enqueue} className="btn btn-primary" />
+        <FilePick label="写真から選ぶ（複数OK）" multiple onFiles={enqueue} className="btn" />
       </div>
 
       {confirming.length > 0 && (

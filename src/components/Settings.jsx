@@ -110,7 +110,7 @@ export default function Settings() {
     <section>
       <div className="page-head">
         <div>
-          <h2 className="title">Settings</h2>
+          <h2 className="title">設定</h2>
           <p className="muted">データは端末のブラウザ内に保存されます（クラウド同期をONにすると他の端末とも共有）</p>
         </div>
       </div>
@@ -185,9 +185,9 @@ export default function Settings() {
         <button className="btn btn-small" onClick={check}>接続を確認</button>
         {health && (
           <p className="muted small">
-            {health.hasKey ? '✓ Gemini APIキー設定済み' : '✕ GEMINI_API_KEY が未設定'} ・ モデル: {health.textModels.join(' → ')} / 画像: {health.imageModels.join(' → ')}
+            {health.hasKey ? 'Gemini APIキー設定済み' : 'GEMINI_API_KEY が未設定'} ・ モデル: {health.textModels.join(' → ')} / 画像: {health.imageModels.join(' → ')}
             {health.passcodeRequired && ' ・ 合言葉が必要'}
-            {health.hasDB ? ' ・ ✓ 同期用DB接続済み' : ' ・ 同期用DB(D1)は未設定'}
+            {health.hasDB ? ' ・ 同期用DB接続済み' : ' ・ 同期用DB(D1)は未設定'}
           </p>
         )}
         <ErrorBox error={hErr} />

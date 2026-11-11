@@ -148,8 +148,8 @@ export default function ItemEditor({ initial, image, onSave, onCancel, saveLabel
       <div className="row wrap editor-tools">
         <FilePick label={img ? '写真を差し替え' : '写真を追加'} onFiles={replace} className="btn btn-small" />
         {img && <button type="button" className="btn btn-small" onClick={reanalyze} disabled={!!busy}>AIで再解析</button>}
-        {img && <button type="button" className="btn btn-small" onClick={productize} disabled={!!busy}>✨ AIで撮り直す</button>}
-        {img && <FilePick label="＋ 写真を追加（背面・裏地・ボタン・タグ・着こなし）" multiple onFiles={addPhotos} className="btn btn-small" />}
+        {img && <button type="button" className="btn btn-small" onClick={productize} disabled={!!busy}>AIで撮り直す</button>}
+        {img && <FilePick label="写真を追加（背面・裏地・ボタン・タグ・着こなし）" multiple onFiles={addPhotos} className="btn btn-small" />}
         {prevImg && <button type="button" className="btn btn-small btn-ghost" onClick={() => { setImg(prevImg); setPrevImg(null); setOriginal(null); }}>写真を元に戻す</button>}
       </div>
       {busy && <Spinner label={busy} />}
